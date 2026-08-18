@@ -1,15 +1,13 @@
-import json
-
 from langchain_openai import ChatOpenAI
 from app.graph.state import OverallState
-from app.schemas.schema import BookingRequest
+from app.schemas.booking import BookingRequest
 from app.prompts.extraction import EXTRACTION_PROMPT
 from app.prompts.classification import CLASSIFICATION_PROMPT
 from app.prompts.response import RESPONSE_PROMPT
 
 from app.tools.booking import get_booking_details
 
-from app.schemas.schema import InputClassification
+from app.schemas.booking import InputClassification
 from app.config import get_settings
 from app.db import get_connection
 
@@ -26,25 +24,25 @@ llm = ChatOpenAI(
 # )
 
 
-def get_user_prompt(state: OverallState) -> dict:
-    prompt = "اطلاعات booking 00000F را نشان بده."
-    return {"user_input": prompt}
-
 
 def classify_intent(state: OverallState) -> dict:
+    messages = state["messages"]
+    last_message = messages[-1]
+    user_message = last_message.content
     structured_llm = llm.with_structured_output(InputClassification)
     classification = structured_llm.invoke(
-        CLASSIFICATION_PROMPT.format(state.get("user_input", ""))
+        CLASSIFICATION_PROMPT.format(user_message)
     )
     return classification
 
 
 def extract_book_ref(state: OverallState) -> dict:
-    user_input = state.get("user_input", "")
-
+    messages = state["messages"]
+    last_message = messages[-1]
+    user_message = last_message.content
     messages = [
         {"role": "system", "content": EXTRACTION_PROMPT},
-        {"role": "user", "content": user_input},
+        {"role": "user", "content": user_message},
     ]
 
     extraction = llm.with_structured_output(BookingRequest).invoke(messages)
@@ -74,7 +72,10 @@ def query_booking(state: OverallState) -> OverallState:
 
 
 def respond_booking_node(state: OverallState) -> OverallState:
+    messages = state["messages"]
+    last_message = messages[-1]
+    user_message = last_message.content
     response = llm.invoke(
-        RESPONSE_PROMPT.format(state.get("user_input"), state.get("booking_result"))
+        RESPONSE_PROMPT.format(user_message, state.get("booking_result"))
     )
     return {"response": response.text}

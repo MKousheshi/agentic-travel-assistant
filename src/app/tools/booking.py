@@ -1,7 +1,7 @@
 from typing import Optional
 import re
 
-from app.schemas.schema import BookingDetails, BoardingPassInfo, FlightSegment
+from app.schemas.booking import BookingDetails, BoardingPassInfo, FlightSegment
 from sqlalchemy import text
 from sqlalchemy.engine import Engine, Connection
 from typing import Optional
