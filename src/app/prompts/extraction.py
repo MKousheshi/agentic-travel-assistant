@@ -1,10 +1,10 @@
-EXTRACTION_PROMPT = """
-You are an information extraction system.
+BOOKING_EXTRACTION_PROMPT = """
+Extract only information explicitly stated by the user.
 
-Your task is to extract the user's parameters from text.
+Never invent booking references, dates, date ranges, or monetary amounts.
+If a required value is absent or ambiguous, return null for that field.
+Do not infer a date from the current date unless the user explicitly asks
+for a relative date and the application provides a trusted current datetime.
 
-Return ONLY valid JSON!
-
-Rules:
-- Do not return any explanation, only JSON.
+CURRENT DATE TIME: {0}
 """

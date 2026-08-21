@@ -3,6 +3,7 @@ from app.config import get_settings
 from langchain.agents import create_agent
 from app.capabilities import registery
 from app.models import PlannerResponse
+
 mini_model = ChatOpenAI(
     model="gpt-4o-mini",
     api_key=get_settings().metis_api_key,
@@ -13,7 +14,7 @@ model = ChatOpenAI(
     api_key=get_settings().metis_api_key,
     base_url="https://api.metisai.ir/openai/v1",
 )
-plan_model = model
+plan_model = mini_model
 
 PLANNER_SYSTEM_PROMPT = """
 You are a capability-bound execution planner.
@@ -84,7 +85,6 @@ Follow the structured output contract provided to you.
 
 {capability_catalog}
 """
-
 
 
 planner_agent = create_agent(
