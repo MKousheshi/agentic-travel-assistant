@@ -6,11 +6,13 @@ from app.graph.nodes import (
     query_booking,
     respond_booking_node,
     classify_intent,
+    create_plan
 )
 
 
 def build_graph():
     workflow = StateGraph(OverallState)
+    workflow.add_node('plan', create_plan)
 
     workflow.add_node("classify", classify_intent)
     workflow.add_node("extraction", extract_book_ref)
@@ -18,11 +20,11 @@ def build_graph():
     workflow.add_node("respond", respond_booking_node)
 
     # workflow.add_edge(START, "input")
-    workflow.add_edge(START, "classify")
+    workflow.add_edge(START, "plan")
     workflow.add_edge("classify", "extraction")
     workflow.add_edge("extraction", "query")
     workflow.add_edge("query", "respond")
 
-    workflow.add_edge("respond", END)
+    workflow.add_edge("plan", END)
 
     return workflow.compile()

@@ -10,6 +10,8 @@ from app.tools.booking import get_booking_details
 from app.schemas.booking import InputClassification
 from app.config import get_settings
 from app.db import get_connection
+from app.agents import planner_agent
+from app.models import ExecutionPlan
 
 llm = ChatOpenAI(
     model="deepseek/deepseek-v4-flash",
@@ -24,15 +26,20 @@ llm = ChatOpenAI(
 # )
 
 
+def create_plan(state: OverallState) -> dict:
+    messages = state["messages"]
+    data = planner_agent.invoke({"messages": messages})
+    # plan = ExecutionPlan(**data)
+    # print(plan)
+    return {}
+
 
 def classify_intent(state: OverallState) -> dict:
     messages = state["messages"]
     last_message = messages[-1]
     user_message = last_message.content
     structured_llm = llm.with_structured_output(InputClassification)
-    classification = structured_llm.invoke(
-        CLASSIFICATION_PROMPT.format(user_message)
-    )
+    classification = structured_llm.invoke(CLASSIFICATION_PROMPT.format(user_message))
     return classification
 
 
