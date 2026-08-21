@@ -3,7 +3,7 @@ from typing import cast
 
 from langchain.agents.middleware.types import InputAgentState
 from langchain_openai import ChatOpenAI
-from langgraph.types import interrupt
+from langgraph.types import Command, interrupt
 from langsmith import traceable
 from pydantic import ValidationError
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -12,9 +12,10 @@ from app.schemas.booking import GuidanceReply, BookingRequest
 from app.prompts.extraction import BOOKING_EXTRACTION_PROMPT
 from app.prompts.correction import BOOKING_CORRECTION_PROMPT
 from app.utils import flatten_validation_errors
-from app.models import PlannerResponse, ExecutionPlan
+from app.models import PlannerResponse, ExecutionPlan, Clarification
 from app.config import get_settings
 from app.agents import planner_agent
+from app.capabilities import registery
 
 llm = ChatOpenAI(
     model="deepseek/deepseek-v4-flash",
@@ -29,15 +30,45 @@ llm = ChatOpenAI(
 )
 
 
-def create_plan(state: OverallState) -> dict:
+def create_plan(state: OverallState) -> Command:
     messages = state["messages"]
-    print(messages)
+    plan = state.get("plan", None)
+    if plan:
+        errors = "plan has these errors:\n" + "\n".join(state.get("errors", []))
+        messages.append(AIMessage(plan.model_dump_json()))
+        messages.append(HumanMessage(errors))
+
     result = planner_agent.invoke(InputAgentState(messages=messages))
-    print(result)
-    response: PlannerResponse = result['structured_response']
-    if type(response.response) is ExecutionPlan:
-        return {'plan': response.response.model_dump()}
-    return response.response.model_dump()
+    response: PlannerResponse = result["structured_response"]
+    if type(response.response) is Clarification:
+        return Command(
+            update=response.response.model_dump()
+            | {"messages": AIMessage(response.response.user_message)},
+            goto="exit",
+        )
+    return Command(update={"plan": response.response}, goto="verify")
+
+
+def verify_plan(state: OverallState) -> Command:
+    plan = state["plan"]
+    errors = []
+    for step in plan.steps:
+        if registery.has(step.capability_id):
+            continue
+        errors.append(
+            f"capability id: {step.capability_id} for step: {step} does not exist."
+        )
+    if errors:
+        return Command(update={"errors": errors}, goto="plan")
+    return Command(goto="execute")
+
+
+def execute_plan(state: OverallState):
+    pass
+
+
+def exit(state: OverallState):
+    return {}
 
 
 @traceable
@@ -75,19 +106,6 @@ def route_after_extraction(state: BookingState) -> str:
     if state.get("errors"):
         return "guidance"
     return "execution"
-
-
-def execute(state: BookingState) -> dict:
-    print(state["booking_request"])
-    return {"response": "executed"}
-
-
-def summerize(state: BookingState) -> dict:
-    pass
-
-
-def respond(state: BookingState) -> dict:
-    pass
 
 
 # def route_after_extraction(state: OverallState) -> str:

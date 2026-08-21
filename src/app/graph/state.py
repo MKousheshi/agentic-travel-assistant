@@ -9,4 +9,4 @@ class OverallState(TypedDict, total=False):
     # book_ref: str
     # booking_result: Optional[dict]
     user_message: str
-    # error: str
+    errors: List[str]

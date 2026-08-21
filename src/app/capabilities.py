@@ -65,6 +65,9 @@ class CapabilityRegistry:
     def all(self) -> list[Capability]:
         return list(self._items.values())
 
+    def has(self, capability_id: str) -> bool:
+        return capability_id in self._items
+
     def catalog(self) -> str:
         """
         This is the only information about capabilities
@@ -73,14 +76,15 @@ class CapabilityRegistry:
         lines = []
 
         for capability in self._items.values():
-            lines.append(f"- {capability.id}: {capability.description}")
+            if capability.is_enable:
+                lines.append(f"- {capability.id}: {capability.description}")
 
         return "\n".join(lines)
 
 
 registery = CapabilityRegistry()
 registery.register(booking_capability)
-registery.register(flight_capability)
-registery.register(ticket_capability)
-registery.register(airport_capability)
-registery.register(weather_capability)
+# registery.register(flight_capability)
+# registery.register(ticket_capability)
+# registery.register(airport_capability)
+# registery.register(weather_capability)
