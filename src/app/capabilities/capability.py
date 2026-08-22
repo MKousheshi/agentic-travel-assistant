@@ -1,9 +1,12 @@
+from typing import Dict
+
 from langchain_core.messages import AnyMessage
+from langsmith import traceable
 from pydantic import BaseModel, Field
-from app.models import PlanStep
+from app.models import PlanStep, CapabilityResult, CapabilityContext
 
 
-class CapabilityState(BaseModel):
+class dict(BaseModel):
     messages: list[AnyMessage] = Field(default_factory=list)
 
 
@@ -12,14 +15,13 @@ class Capability(BaseModel):
     description: str
     is_enabled: bool = Field(default=True)
 
-    def execute(self, plan_step: PlanStep, state: CapabilityState) -> dict:
+    def execute(self, step: PlanStep, context: CapabilityContext) -> CapabilityResult:
         raise NotImplementedError
-
 
 
 class CapabilityRegistry:
     def __init__(self) -> None:
-        self._items: dict[str, Capability] = {}
+        self._items: Dict[str, Capability] = {}
 
     def register(self, capability: Capability) -> None:
         self._items[capability.id] = capability
@@ -34,7 +36,7 @@ class CapabilityRegistry:
         return list(self._items.values())
 
     def has(self, capability_id: str) -> bool:
-        return capability_id in self._items    
+        return capability_id in self._items
 
     def catalog(self) -> str:
         """
@@ -45,7 +47,8 @@ class CapabilityRegistry:
 
         for capability in self._items.values():
             if capability.is_enabled:
-                lines.append(f"- Capability ID: {capability.id}\n  Description: {capability.description}")
+                lines.append(
+                    f"- Capability ID: {capability.id}\n  Description: {capability.description}"
+                )
 
         return "\n".join(lines)
-

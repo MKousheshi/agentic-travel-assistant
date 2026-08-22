@@ -1,6 +1,8 @@
-from typing import Literal
+from typing import Annotated, Any, Literal, Union
 
+from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
+
 
 class PlanStep(BaseModel):
     capability_id: str = Field(
@@ -70,5 +72,86 @@ class PlannerResponse(BaseModel):
         )
     )
 
-class AgentResponse(BaseModel):
-    response: str = Field(description='Return your response to the request')
+
+class StepExecution(BaseModel):
+    step_index: int
+    capability_id: str
+    action: str
+    status: Literal[
+        "success",
+        "failure",
+        "needs_information",
+    ]
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionState(BaseModel):
+    current_step_index: int = 0
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    status: Literal[
+        "running",
+        "waiting_for_user",
+        "failed",
+        "completed",
+    ] = "running"
+    pending_question: str | None = None
+
+
+class CapabilitySuccess(BaseModel):
+    status: Literal["success"] = "success"
+    message: str = Field(
+        description="A human-readable result of the successful operation."
+    )
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityNeedsInformation(BaseModel):
+    status: Literal["needs_information"] = "needs_information"
+    message: str = Field(
+        description="A short explanation of why more information is required."
+    )
+    missing_fields: list[str] = Field(
+        description="The fields that must be provided by the user."
+    )
+    question: str = Field(
+        description="The exact question that should be shown to the user."
+    )
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityFailure(BaseModel):
+    status: Literal["failure"] = "failure"
+    message: str = Field(description="A user-friendly explanation of the failure.")
+    reason: str = Field(description="The technical or business reason for the failure.")
+    # retryable: bool = False
+    # error_code: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+# CapabilityResult = Annotated[
+#     CapabilitySuccess | CapabilityNeedsInformation | CapabilityFailure,
+#     Field(discriminator="status"),
+# ]
+CapabilityResult = Union[
+    CapabilitySuccess, CapabilityNeedsInformation, CapabilityFailure
+]
+
+
+class CapabilityContext(BaseModel):
+    messages: list[AnyMessage]
+    prior_results: list[dict[str, Any]]
+
+
+class ResponseSynthesisInput(BaseModel):
+    outcome: Literal[
+        "success",
+        "failure",
+        "needs_information",
+    ]
+    step_results: list[dict[str, Any]]
+    failed_step: dict[str, Any] | None = None
+    pending_question: str | None = None
+
+
+class ResponseSynthesis(BaseModel):
+    user_message: str

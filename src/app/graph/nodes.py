@@ -1,54 +1,38 @@
-from datetime import datetime
-from typing import cast
+from typing import Any
 
-from langchain.agents.middleware.types import InputAgentState
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command, interrupt
 from langsmith import traceable
-from pydantic import ValidationError
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from app.graph.state import OverallState, OverallState as BookingState
-from app.schemas.booking import GuidanceReply, BookingRequest
-from app.prompts.extraction import BOOKING_EXTRACTION_PROMPT
-from app.prompts.correction import BOOKING_CORRECTION_PROMPT
-from app.utils import flatten_validation_errors
-from app.models import PlannerResponse, ExecutionPlan, Clarification
+from app.graph.state import OverallState
+from app.models import (
+    PlannerResponse,
+    ExecutionState,
+    Clarification,
+    CapabilityFailure,
+    StepExecution,
+    CapabilitySuccess,
+    CapabilityNeedsInformation,
+    CapabilityContext,
+)
 from app.config import get_settings
-from app.agents import planner_agent, planner_llm, PLANNER_PROMPT
-from app._capabilities import registery
+from app.agents import planner_llm, PLANNER_PROMPT
+from app._capabilities import registry
 
-llm = ChatOpenAI(
-    model="deepseek/deepseek-v4-flash",
-    api_key=get_settings().openrouter_api_key,
-    base_url="https://openrouter.ai/api/v1",
-)
+# TODO: set by config
+# llm = ChatOpenAI(
+#     model="deepseek/deepseek-v4-flash",
+#     api_key=get_settings().openrouter_api_key,
+#     base_url="https://openrouter.ai/api/v1",
+# )
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    api_key=get_settings().metis_api_key,
-    base_url="https://api.metisai.ir/openai/v1",
-)
-
-
-# def create_plan(state: OverallState) -> Command:
-#     messages = state["messages"]
-#     plan = state.get("plan", None)
-#     if plan:
-#         errs = state.get("errors", [])
-#         errors = "plan has these errors:\n" + "\n".join(errs) if errs else None
-#         messages.append(AIMessage(plan.model_dump_json()))
-#         messages.append(HumanMessage(errors))
+# llm = ChatOpenAI(
+#     model="gpt-4o-mini",
+#     api_key=get_settings().metis_api_key,
+#     base_url="https://api.metisai.ir/openai/v1",
+# )
 
 
-#     result = planner_agent.invoke(InputAgentState(messages=messages))
-#     response: PlannerResponse = result["structured_response"]
-#     if type(response.response) is Clarification:
-#         return Command(
-#             update=response.response.model_dump()
-#             | {"messages": AIMessage(response.response.user_message)},
-#             goto="exit",
-#         )
-#     return Command(update={"plan": response.response}, goto="verify")
 @traceable
 def create_plan(state: OverallState) -> Command:
     # Avoid mutating state["messages"] in place
@@ -65,7 +49,7 @@ def create_plan(state: OverallState) -> Command:
                 HumanMessage(
                     content=(
                         "The previous plan failed verification.\n"
-                        f"Available capabilities: {[c.id for c in registery.all()]}\n"
+                        f"Available capabilities: {[c.id for c in registry.all()]}\n"
                         "Create a corrected plan based on these errors:\n"
                         + "\n".join(f"- {error}" for error in errors)
                     )
@@ -96,100 +80,96 @@ def create_plan(state: OverallState) -> Command:
     )
 
 
+@traceable
 def verify_plan(state: OverallState) -> Command:
     plan = state["plan"]
     errors = []
     for step in plan.steps:
-        if registery.has(step.capability_id):
+        if registry.has(step.capability_id):
             continue
         errors.append(
             f"capability id: {step.capability_id} for step: {step} does not exist."
         )
     if errors:
         return Command(update={"errors": errors}, goto="plan")
-    return Command(goto="execute")
+    return Command(goto="execution", update={"execution": ExecutionState()})
 
 
-def execute_plan(state: OverallState):
-    plan = state["plan"]
-    results = []
-    for step in plan.steps:
-        capability = registery.get(step.capability_id)
-        if capability:
-            result = capability.execute(step, {"messages": state["messages"]})
-            if "user_message" in result:
-                results.append(result["user_message"])
-
-    return {"user_message": "\n".join(results)}
-
-
-def exit(state: OverallState):
-    return {}
-
-
-@traceable
-def extract(state: BookingState) -> dict:
-    messages = state["messages"]
-    print(messages)
-    messages = [
-        SystemMessage(BOOKING_EXTRACTION_PROMPT.format(datetime.now())),
-    ] + messages
-    try:
-        data = agent.invoke({"messages": messages})  # type: ignore
-        print(data)
-        booking_request = cast(BookingRequest, data)
-    except ValidationError as err:
-        return {"errors": flatten_validation_errors(err)}
-
-    return {"booking_request": booking_request.model_dump()} | {"errors": []}
+# def build_capability_context(
+#     state: OverallState,
+#     execution: ExecutionState,
+# ) -> dict[str, Any]:
+#     return {
+#         "messages": state.get("messages", []),
+#         "completed_steps": [item.model_dump() for item in execution.completed_steps],
+#         "results": {
+#             item.capability_id: item.result
+#             for item in execution.completed_steps
+#             if item.status == "success"
+#         },
+#     }
 
 
 @traceable
-def guide_user(state: BookingState) -> dict:
-    messages = [
-        SystemMessage(BOOKING_CORRECTION_PROMPT),
-        HumanMessage(
-            f"User's latest input:\n{state['messages'][-1].content}\n\nValidation errors:\n{state.get('errors')}"
-        ),
-    ]
-    data = llm.with_structured_output(GuidanceReply).invoke(messages)
-    guidance = cast(GuidanceReply, data)
-    user_input = interrupt(guidance.message)
-    return {"messages": [AIMessage(guidance.message), HumanMessage(user_input)]}
-
-
-def route_after_extraction(state: BookingState) -> str:
-    if state.get("errors"):
-        return "guidance"
+def execution_router(state: OverallState) -> str:
+    exec_state = state.get("execution", None)
+    plan = state.get("plan", None)
+    if not plan or not exec_state:
+        return "exit"
+    if exec_state.status == "completed":
+        return "synth"
     return "execution"
 
 
-# def route_after_extraction(state: OverallState) -> str:
-#     if state.get("intent") == "get_booking_by_ref_book":
-#         if state.get("ref_book"):
-#             return "query_booking"
-#         return "ask_missing_ref_book"
-#     return "fallback"
+@traceable
+def execute_plan(state: OverallState) -> dict:
+    exec_state = state.get("execution", None)
+    plan = state.get("plan", None)
+    if not plan or not exec_state:
+        return {}
+
+    step = plan.steps[exec_state.current_step_index]
+    capability = registry.get(step.capability_id)
+    if not capability:
+        raise ReferenceError(f"Capability {step.capability_id} not found")
+    context = CapabilityContext(
+        messages=state["messages"], prior_results=exec_state.results
+    )
+    result = capability.execute(step, context)
+    next_exec_state = exec_state.model_copy()
+    match (result.status):
+        case "success":
+            next_exec_state.results.append(result.data)
+            next_exec_state.current_step_index += 1
+            if next_exec_state.current_step_index == len(plan.steps):
+                next_exec_state.status = "completed"
+        case "failure":
+            next_exec_state.status = "failed"
+        case "needs_information":
+            next_exec_state.status = "waiting_for_user"
+            next_exec_state.pending_question = result.question
+
+    return {"execution": next_exec_state}
 
 
-# def query_booking(state: OverallState) -> OverallState:
-#     ref_book = state.get("book_ref", "")
-#     with get_connection() as conn:
-#         result = get_booking_details(conn, ref_book)
+@traceable
+def synthesize(state: OverallState) -> dict:
+    execution = state.get("execution")
+    if not execution:
+        return {}
+    match (execution.status):
+        case "completed":
+            #todo use llm
+            return {"user_message": execution.results}
+        case "failed":
+            #todo
+            return {}
+        case "waiting_for_user":
+            return {"user_message": execution.pending_question}
+        case _:
+            return {}
 
-#     if result is None:
-#         state["booking_result"] = None
-#     else:
-#         state["booking_result"] = result.model_dump()
 
-#     return state
-
-
-# def respond_booking_node(state: OverallState) -> OverallState:
-#     messages = state["messages"]
-#     last_message = messages[-1]
-#     user_message = last_message.content
-#     response = llm.invoke(
-#         RESPONSE_PROMPT.format(user_message, state.get("booking_result"))
-#     )
-#     return {"response": response.text}
+@traceable
+def exit(state: OverallState):
+    return {}

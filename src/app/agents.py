@@ -1,5 +1,5 @@
 from langchain.agents import create_agent
-from app._capabilities import registery
+from app._capabilities import registry
 from app.models import PlannerResponse
 from app.chat_models import plan_model
 
@@ -76,12 +76,12 @@ Follow the structured output contract provided to you.
 
 planner_agent = create_agent(
     model=plan_model,
-    system_prompt=PLANNER_SYSTEM_PROMPT.format(capability_catalog=registery.catalog()),
+    system_prompt=PLANNER_SYSTEM_PROMPT.format(capability_catalog=registry.catalog()),
     response_format=PlannerResponse,
 )
 
 planner_llm = plan_model.with_structured_output(PlannerResponse)
 
 PLANNER_PROMPT = PLANNER_SYSTEM_PROMPT.format(
-    capability_catalog=registery.catalog()
+    capability_catalog=registry.catalog()
 )

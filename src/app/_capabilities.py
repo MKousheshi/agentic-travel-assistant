@@ -49,9 +49,9 @@ weather_capability = Capability(
     ),
 )
 
-registery = CapabilityRegistry()
+registry = CapabilityRegistry()
 
-registery.register(BookingCapability())
+registry.register(BookingCapability())
 
 
 # registery.register(booking_capability)

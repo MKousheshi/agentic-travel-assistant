@@ -10,9 +10,13 @@ class Settings(BaseSettings):
     db_path: str
     langsmith_api_key: SecretStr
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings() # type: ignore[call-arg]
+    return Settings()  # type: ignore[call-arg]
