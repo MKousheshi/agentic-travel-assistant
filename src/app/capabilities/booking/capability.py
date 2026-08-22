@@ -17,7 +17,7 @@ class BookingCapability(Capability):
         "- Search bookings by date or date range\n"
         "- Calculate booking counts and revenue for a period\n"
         "- Create new bookings with a reference, date, and total amount\n"
-        "- Delete bookings after checking dependencies"
+        "- Delete bookings"
     )
 
     def execute(self, plan_step: PlanStep, state: CapabilityState) -> dict:

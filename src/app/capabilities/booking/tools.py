@@ -245,7 +245,6 @@ def create_booking(
                 "message": f"Failed to create booking: {str(e)}",
                 "booking": None,
             }
-            
 
 
 # ─────────────────────────────────────────────
@@ -265,29 +264,25 @@ class DeleteBookingInput(BaseModel):
 def delete_booking_with_dependency_check(book_ref: str) -> dict:
     """
     Delete a booking only after checking all related/dependent records.
-
-    Typical dependencies may include payments, invoices, tickets,
-    passengers, refunds, or audit records.
-
-    Expected failure result:
-    {
-        "deleted": false,
-        "book_ref": "BK-2026-0001",
-        "dependencies": ["payment", "invoice"],
-        "message": "Deletion blocked because dependent records exist."
-    }
     """
-    # dependencies = booking_service.find_dependencies(book_ref)
-    # if dependencies:
-    #     return {
-    #         "deleted": False,
-    #         "book_ref": book_ref,
-    #         "dependencies": dependencies,
-    #     }
-    #
-    # booking_service.delete(book_ref)
-    # return {"deleted": True, "book_ref": book_ref}
-    pass
+
+    with Session(engine) as session:
+        try:
+            services.delete_booking_by_ref(
+                session,
+                book_ref=book_ref,
+            )
+            session.commit()
+            return {
+                'deleted': True,
+                "message": "Booking deleted successfully",
+            }
+        except Exception as e:
+            session.rollback()
+            return {
+                'deleted': False,
+                "message": f"Failed to delete booking. {str(e)}",
+            }
 
 
 booking_tools = [
@@ -295,5 +290,5 @@ booking_tools = [
     search_bookings,
     calculate_booking_analytics,
     create_booking,
-    # delete_booking_with_dependency_check,
+    delete_booking_with_dependency_check,
 ]

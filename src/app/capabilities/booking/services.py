@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import String, Numeric, DateTime, func, select
+from sqlalchemy import String, Numeric, DateTime, delete, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from sqlalchemy.exc import IntegrityError
 
@@ -218,3 +218,31 @@ def create_booking(
         ) from exc
 
     return booking
+
+
+class BookingNotFoundError(LookupError):
+    """Raised when no booking exists for the requested book_ref."""
+
+
+def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
+    """
+    Delete one booking by its reference.
+
+    Raises:
+        ValueError: If `book_ref` is not a 6-character string.
+        BookingNotFoundError: If no matching booking exists.
+
+    The function flushes the DELETE but does not commit the transaction.
+    """
+    print(f"[[ deleting {book_ref}]]")
+    if not isinstance(book_ref, str) or len(book_ref) != 6:
+        raise ValueError("book_ref must be a string of exactly 6 characters.")
+
+    stmt = delete(Booking).where(Booking.book_ref == book_ref)
+
+    result = session.execute(stmt)
+
+    if result.rowcount == 0:
+        raise BookingNotFoundError(f"No booking was found with reference {book_ref!r}.")
+
+    session.flush()
