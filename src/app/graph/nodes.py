@@ -15,7 +15,7 @@ from app.utils import flatten_validation_errors
 from app.models import PlannerResponse, ExecutionPlan, Clarification
 from app.config import get_settings
 from app.agents import planner_agent
-from app.capabilities import registery
+from app._capabilities import registery
 
 llm = ChatOpenAI(
     model="deepseek/deepseek-v4-flash",
@@ -64,7 +64,16 @@ def verify_plan(state: OverallState) -> Command:
 
 
 def execute_plan(state: OverallState):
-    pass
+    plan = state["plan"]
+    results = []
+    for step in plan.steps:
+        capability = registery.get(step.capability_id)
+        if capability:
+            result = capability.execute(step, {"messages": state["messages"]})
+            if "user_message" in result:
+                results.append(result["user_message"])
+
+    return {"user_message": "\n".join(results)}
 
 
 def exit(state: OverallState):

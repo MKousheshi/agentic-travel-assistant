@@ -1,4 +1,5 @@
-from app.models import Capability
+from app.capabilities.capability import Capability, CapabilityRegistry
+from app.capabilities.booking.capability import BookingCapability
 
 booking_capability = Capability(
     id="booking",
@@ -8,8 +9,8 @@ booking_capability = Capability(
         "create new bookings with a reference, date, and total amount, and "
         "delete bookings after checking dependencies."
     ),
-)
 
+)
 flight_capability = Capability(
     id="flight",
     description=(
@@ -48,42 +49,12 @@ weather_capability = Capability(
     ),
 )
 
-
-class CapabilityRegistry:
-    def __init__(self) -> None:
-        self._items: dict[str, Capability] = {}
-
-    def register(self, capability: Capability) -> None:
-        self._items[capability.id] = capability
-
-    def unregister(self, capability_id: str) -> None:
-        self._items.pop(capability_id, None)
-
-    def get(self, capability_id: str) -> Capability | None:
-        return self._items.get(capability_id)
-
-    def all(self) -> list[Capability]:
-        return list(self._items.values())
-
-    def has(self, capability_id: str) -> bool:
-        return capability_id in self._items
-
-    def catalog(self) -> str:
-        """
-        This is the only information about capabilities
-        given to the planner.
-        """
-        lines = []
-
-        for capability in self._items.values():
-            if capability.is_enable:
-                lines.append(f"- {capability.id}: {capability.description}")
-
-        return "\n".join(lines)
-
-
 registery = CapabilityRegistry()
-registery.register(booking_capability)
+
+registery.register(BookingCapability())
+
+
+# registery.register(booking_capability)
 # registery.register(flight_capability)
 # registery.register(ticket_capability)
 # registery.register(airport_capability)

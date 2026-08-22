@@ -2,19 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
-class Capability(BaseModel):
-    id: str
-    description: str
-    is_enable: bool = Field(default=True)
-
-
-# class PlanStep(BaseModel):
-#     capability_id: str
-#     reason: str
-#     # depends_on: list[str] = Field(default_factory=list)
-
-
 class PlanStep(BaseModel):
     capability_id: str = Field(
         description=(
@@ -22,10 +9,24 @@ class PlanStep(BaseModel):
             "that should be used for this step."
         )
     )
+    action: str = Field(
+        description=(
+            "A concise imperative description of the work to perform, such as "
+            "'Find available flights', 'Create a booking', or 'Cancel ticket'."
+        )
+    )
+
+    goal: str = Field(
+        description=(
+            "The concrete outcome that must be achieved for this step to be "
+            "considered successful. Describe the result, not the method."
+        )
+    )
+
     reason: str = Field(
         description=(
-            "Why this capability must be executed at this point in the plan, "
-            "including any dependency on earlier steps."
+            "Why this step is necessary and why it must occur after any "
+            "preceding steps."
         )
     )
 
@@ -68,3 +69,6 @@ class PlannerResponse(BaseModel):
             "the available capabilities."
         )
     )
+
+class AgentResponse(BaseModel):
+    response: str = Field(description='Return your response to the request')

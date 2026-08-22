@@ -1,0 +1,265 @@
+from datetime import date
+from decimal import Decimal
+from typing import Optional
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.orm import Session
+from app.db import engine
+from app.capabilities.booking import services
+
+# ─────────────────────────────────────────────
+# 1. Retrieve a booking by reference
+# ─────────────────────────────────────────────
+
+
+class GetBookingInput(BaseModel):
+    book_ref: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="Unique booking reference, must be exactly 6 letters, alphanumeric",
+    )
+
+
+@tool(args_schema=GetBookingInput)
+def get_booking_by_ref(book_ref: str) -> dict:
+    """Retrieve complete booking information using its booking reference."""
+
+    with Session(engine) as session:
+        booking = services.get_booking_by_ref(session, book_ref)
+
+        if booking is None:
+            return {
+                "found": False,
+                "booking": None,
+                "message": f"No booking was found for reference '{book_ref}'.",
+            }
+
+        return {
+            "found": True,
+            "booking": {
+                "book_ref": booking.book_ref,
+                "book_date": (
+                    booking.book_date.isoformat() if booking.book_date else None
+                ),
+                "total_amount": (
+                    float(booking.total_amount)
+                    if booking.total_amount is not None
+                    else None
+                ),
+            },
+            "message": "Booking retrieved successfully.",
+        }
+
+
+# ─────────────────────────────────────────────
+# 2. Search by one date or a date range
+# ─────────────────────────────────────────────
+
+
+class SearchBookingsInput(BaseModel):
+    date_book: Optional[date] = Field(
+        default=None,
+        description="Exact booking date in YYYY-MM-DD format.",
+    )
+    date_from: Optional[date] = Field(
+        default=None,
+        description="Start date of the search range in YYYY-MM-DD format.",
+    )
+    date_to: Optional[date] = Field(
+        default=None,
+        description="End date of the search range in YYYY-MM-DD format.",
+    )
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of booking records to return.",
+    )
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        # Exact-date search cannot be mixed with range search.
+        if self.date_book and (self.date_from or self.date_to):
+            raise ValueError(
+                "Use date_book for an exact-date search, or date_from/date_to "
+                "for a range search—not both."
+            )
+
+        if not self.date_book and not self.date_from and not self.date_to:
+            raise ValueError(
+                "Provide at least one of: date_book, date_from, or date_to."
+            )
+
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError("date_from must be earlier than or equal to date_to.")
+
+        return self
+
+
+@tool(args_schema=SearchBookingsInput)
+def search_bookings(
+    date_book: Optional[date] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    limit: int = 50,
+) -> dict:
+    """
+    Search bookings for one exact date or within an inclusive date range.
+    """
+    # bookings = booking_service.search(
+    #     date_book=date_book,
+    #     date_from=date_from,
+    #     date_to=date_to,
+    #     limit=limit,
+    # )
+    pass
+
+
+# ─────────────────────────────────────────────
+# 3. Calculate booking analytics for a time range
+# ─────────────────────────────────────────────
+
+
+class BookingAnalyticsInput(BaseModel):
+    date_from: date = Field(
+        ...,
+        description="Start date of the reporting range in YYYY-MM-DD format.",
+    )
+    date_to: date = Field(
+        ...,
+        description="End date of the reporting range in YYYY-MM-DD format.",
+    )
+    include_cancelled: bool = Field(
+        default=False,
+        description="Whether cancelled bookings should be included.",
+    )
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if self.date_from > self.date_to:
+            raise ValueError("date_from must be earlier than or equal to date_to.")
+        return self
+
+
+@tool(args_schema=BookingAnalyticsInput)
+def calculate_booking_analytics(
+    date_from: date,
+    date_to: date,
+    include_cancelled: bool = False,
+) -> dict:
+    """
+    Calculate amount_total sum, booking count, and revenue for a date range.
+
+    Expected result:
+    {
+        "date_from": "2026-08-01",
+        "date_to": "2026-08-31",
+        "booking_count": 42,
+        "amount_total": "12500000.00",
+        "revenue": "11000000.00"
+    }
+    """
+    # analytics = booking_service.calculate_analytics(
+    #     date_from=date_from,
+    #     date_to=date_to,
+    #     include_cancelled=include_cancelled,
+    # )
+    pass
+
+
+# ─────────────────────────────────────────────
+# 4. Create a booking
+# ─────────────────────────────────────────────
+
+
+class CreateBookingInput(BaseModel):
+    book_ref: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Unique reference code for the new booking.",
+    )
+    total_amount: Decimal = Field(
+        ...,
+        gt=0,
+        max_digits=14,
+        decimal_places=2,
+        description="Final total amount of the booking.",
+    )
+    book_date: date = Field(
+        ...,
+        description="Booking date in YYYY-MM-DD format.",
+    )
+
+
+@tool(args_schema=CreateBookingInput)
+def create_booking(
+    book_ref: str,
+    total_amount: Decimal,
+    book_date: date,
+) -> dict:
+    """
+    Create a new booking with a unique book_ref, total_amount, and book_date.
+
+    The implementation should verify that book_ref does not already exist
+    before inserting the booking.
+    """
+    # booking = booking_service.create(
+    #     book_ref=book_ref,
+    #     total_amount=total_amount,
+    #     book_date=book_date,
+    # )
+    pass
+
+
+# ─────────────────────────────────────────────
+# 5. Delete only when no dependencies exist
+# ─────────────────────────────────────────────
+
+
+class DeleteBookingInput(BaseModel):
+    book_ref: str = Field(
+        ...,
+        min_length=1,
+        description="Reference of the booking to delete.",
+    )
+
+
+@tool(args_schema=DeleteBookingInput)
+def delete_booking_with_dependency_check(book_ref: str) -> dict:
+    """
+    Delete a booking only after checking all related/dependent records.
+
+    Typical dependencies may include payments, invoices, tickets,
+    passengers, refunds, or audit records.
+
+    Expected failure result:
+    {
+        "deleted": false,
+        "book_ref": "BK-2026-0001",
+        "dependencies": ["payment", "invoice"],
+        "message": "Deletion blocked because dependent records exist."
+    }
+    """
+    # dependencies = booking_service.find_dependencies(book_ref)
+    # if dependencies:
+    #     return {
+    #         "deleted": False,
+    #         "book_ref": book_ref,
+    #         "dependencies": dependencies,
+    #     }
+    #
+    # booking_service.delete(book_ref)
+    # return {"deleted": True, "book_ref": book_ref}
+    pass
+
+
+booking_tools = [
+    get_booking_by_ref,
+    # search_bookings,
+    # calculate_booking_analytics,
+    # create_booking,
+    # delete_booking_with_dependency_check,
+]
