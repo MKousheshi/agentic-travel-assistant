@@ -8,6 +8,22 @@ from sqlalchemy.orm import Session
 from app.db import engine
 from app.capabilities.booking import services
 
+
+def serialize_booking(booking: services.Booking) -> dict:
+    """
+    Return only JSON-serializable, agent-safe booking fields.
+
+    Adjust these fields to match your Booking model.
+    """
+    return {
+        "book_ref": booking.book_ref,
+        "book_date": (booking.book_date.isoformat() if booking.book_date else None),
+        "total_amount": (
+            float(booking.total_amount) if booking.total_amount is not None else None
+        ),
+    }
+
+
 # ─────────────────────────────────────────────
 # 1. Retrieve a booking by reference
 # ─────────────────────────────────────────────
@@ -38,17 +54,7 @@ def get_booking_by_ref(book_ref: str) -> dict:
 
         return {
             "found": True,
-            "booking": {
-                "book_ref": booking.book_ref,
-                "book_date": (
-                    booking.book_date.isoformat() if booking.book_date else None
-                ),
-                "total_amount": (
-                    float(booking.total_amount)
-                    if booking.total_amount is not None
-                    else None
-                ),
-            },
+            "booking": serialize_booking(booking),
             "message": "Booking retrieved successfully.",
         }
 
@@ -98,23 +104,46 @@ class SearchBookingsInput(BaseModel):
         return self
 
 
+def format_validation_error(error: Exception) -> str:
+    """
+    Converts LangChain/Pydantic validation failures into a useful tool response.
+    """
+    return f"Invalid search_bookings input: {error}"
+
+
 @tool(args_schema=SearchBookingsInput)
 def search_bookings(
     date_book: Optional[date] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-    limit: int = 50,
+    limit: int = 10,
 ) -> dict:
     """
     Search bookings for one exact date or within an inclusive date range.
+
+    Use either:
+    - date_book: an exact booking date
+    - date_from and date_to: an inclusive date range
     """
-    # bookings = booking_service.search(
-    #     date_book=date_book,
-    #     date_from=date_from,
-    #     date_to=date_to,
-    #     limit=limit,
-    # )
-    pass
+    with Session(engine) as session:
+        if date_book is not None:
+            bookings = services.search_bookings_for_date(
+                session,
+                booking_date=date_book,
+                limit=limit,
+            )
+        else:
+            bookings = services.search_bookings_by_date_range(
+                session,
+                start_date=date_from,
+                end_date=date_to,
+                limit=limit,
+            )
+
+    return {
+        "count": len(bookings),
+        "bookings": [serialize_booking(booking) for booking in bookings],
+    }
 
 
 # ─────────────────────────────────────────────
@@ -258,7 +287,7 @@ def delete_booking_with_dependency_check(book_ref: str) -> dict:
 
 booking_tools = [
     get_booking_by_ref,
-    # search_bookings,
+    search_bookings,
     # calculate_booking_analytics,
     # create_booking,
     # delete_booking_with_dependency_check,
