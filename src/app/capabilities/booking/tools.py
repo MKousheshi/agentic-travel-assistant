@@ -160,10 +160,6 @@ class BookingAnalyticsInput(BaseModel):
         ...,
         description="End date of the reporting range in YYYY-MM-DD format.",
     )
-    include_cancelled: bool = Field(
-        default=False,
-        description="Whether cancelled bookings should be included.",
-    )
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -176,26 +172,17 @@ class BookingAnalyticsInput(BaseModel):
 def calculate_booking_analytics(
     date_from: date,
     date_to: date,
-    include_cancelled: bool = False,
 ) -> dict:
     """
-    Calculate amount_total sum, booking count, and revenue for a date range.
-
-    Expected result:
-    {
-        "date_from": "2026-08-01",
-        "date_to": "2026-08-31",
-        "booking_count": 42,
-        "amount_total": "12500000.00",
-        "revenue": "11000000.00"
-    }
+    Calculate revenue (total_amount sum) and booking count for a date range.
     """
-    # analytics = booking_service.calculate_analytics(
-    #     date_from=date_from,
-    #     date_to=date_to,
-    #     include_cancelled=include_cancelled,
-    # )
-    pass
+    with Session(engine) as session:
+        summary = services.calculate_booking_revenue(session, start_date=date_from, end_date=date_to)
+        return {
+            "count": summary.booking_count,
+            "revenue": summary.total_revenue,
+        }
+    
 
 
 # ─────────────────────────────────────────────
@@ -288,7 +275,7 @@ def delete_booking_with_dependency_check(book_ref: str) -> dict:
 booking_tools = [
     get_booking_by_ref,
     search_bookings,
-    # calculate_booking_analytics,
+    calculate_booking_analytics,
     # create_booking,
     # delete_booking_with_dependency_check,
 ]

@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import String, Numeric, DateTime, select
+from sqlalchemy import String, Numeric, DateTime, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
 
@@ -73,12 +74,6 @@ def search_bookings_by_date_range(
 
     return list(session.scalars(stmt))
 
-
-from datetime import date, datetime, time, timedelta, timezone
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-
 def search_bookings_for_date(
     session: Session,
     booking_date: date,
@@ -114,3 +109,50 @@ def search_bookings_for_date(
     )
 
     return list(session.scalars(stmt))
+
+
+@dataclass(frozen=True)
+class BookingRevenueSummary:
+    booking_count: int
+    total_revenue: Decimal
+
+
+def calculate_booking_revenue(
+    session: Session,
+    *,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> BookingRevenueSummary:
+    """
+    Calculate booking count and summed total_amount for an optional inclusive date range.
+
+    - start_date only: bookings on/after start_date
+    - end_date only: bookings on/before end_date
+    - both: bookings within the inclusive range
+    - neither: calculates across all bookings
+
+    For no matching bookings:
+        booking_count = 0
+        total_revenue = Decimal("0.00")
+    """
+    if start_date is not None and end_date is not None:
+        if start_date > end_date:
+            raise ValueError("start_date must be earlier than or equal to end_date.")
+
+    stmt = select(
+        func.count(Booking.book_ref).label("booking_count"),
+        func.coalesce(func.sum(Booking.total_amount), 0).label("total_revenue"),
+    )
+
+    if start_date is not None:
+        stmt = stmt.where(Booking.book_date >= start_date)
+
+    if end_date is not None:
+        stmt = stmt.where(Booking.book_date <= end_date)
+
+    row = session.execute(stmt).one()
+
+    return BookingRevenueSummary(
+        booking_count=row.booking_count,
+        total_revenue=Decimal(row.total_revenue),
+    )

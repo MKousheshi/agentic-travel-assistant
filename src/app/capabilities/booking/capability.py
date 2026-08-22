@@ -14,7 +14,7 @@ class BookingCapability(Capability):
     id: str = "booking"
     description: str = (
         "Retrieve bookings by reference, search bookings by date or date range, "
-        "calculate booking counts, total amounts, and revenue for a period, "
+        "calculate booking counts and revenue for a period, "
         "create new bookings with a reference, date, and total amount, and "
         "delete bookings after checking dependencies."
     )
