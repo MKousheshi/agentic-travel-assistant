@@ -11,4 +11,4 @@ model = ChatOpenAI(
     api_key=get_settings().metis_api_key,
     base_url="https://api.metisai.ir/openai/v1",
 )
-plan_model = model
+plan_model = mini_model

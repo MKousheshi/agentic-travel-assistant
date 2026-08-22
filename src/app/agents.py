@@ -79,3 +79,9 @@ planner_agent = create_agent(
     system_prompt=PLANNER_SYSTEM_PROMPT.format(capability_catalog=registery.catalog()),
     response_format=PlannerResponse,
 )
+
+planner_llm = plan_model.with_structured_output(PlannerResponse)
+
+PLANNER_PROMPT = PLANNER_SYSTEM_PROMPT.format(
+    capability_catalog=registery.catalog()
+)

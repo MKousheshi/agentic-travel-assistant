@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import String, Numeric, DateTime, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+from sqlalchemy.exc import IntegrityError
 
 
 class Base(DeclarativeBase):
@@ -73,6 +74,7 @@ def search_bookings_by_date_range(
     stmt = stmt.order_by(Booking.book_date.desc()).limit(limit)
 
     return list(session.scalars(stmt))
+
 
 def search_bookings_for_date(
     session: Session,
@@ -156,3 +158,63 @@ def calculate_booking_revenue(
         booking_count=row.booking_count,
         total_revenue=Decimal(row.total_revenue),
     )
+
+
+class BookingAlreadyExistsError(ValueError):
+    """Raised when a booking with the same book_ref already exists."""
+
+
+def create_booking(
+    session: Session,
+    *,
+    book_ref: str,
+    book_date: datetime,
+    total_amount: Decimal,
+) -> Booking:
+    """
+    Create and persist a booking.
+
+    The database primary-key/unique constraint is the final protection against
+    duplicate book_ref values, including concurrent requests.
+
+    This function flushes but does not commit the outer transaction.
+    """
+    if not isinstance(book_ref, str) or len(book_ref) != 6:
+        raise ValueError("book_ref must be a string of exactly 6 characters.")
+
+    if not isinstance(book_date, datetime):
+        raise ValueError("book_date must be a datetime.")
+
+    if not isinstance(total_amount, Decimal):
+        raise ValueError("total_amount must be a Decimal.")
+
+    if total_amount < Decimal("0.00"):
+        raise ValueError("total_amount cannot be negative.")
+
+    existing_booking = session.scalar(
+        select(Booking.book_ref).where(Booking.book_ref == book_ref)
+    )
+
+    if existing_booking is not None:
+        raise BookingAlreadyExistsError(
+            f"A booking with reference {book_ref!r} already exists."
+        )
+
+    booking = Booking(
+        book_ref=book_ref,
+        book_date=book_date,
+        total_amount=total_amount,
+    )
+
+    try:
+        # A savepoint lets us handle a duplicate without rolling back an
+        # outer transaction that may be managed by the caller.
+        with session.begin_nested():
+            session.add(booking)
+            session.flush()  # Executes INSERT now, so uniqueness is checked now.
+    except IntegrityError as exc:
+        raise BookingAlreadyExistsError(
+            f"A booking with reference {book_ref!r} already exists."
+        ) from exc
+
+    return booking

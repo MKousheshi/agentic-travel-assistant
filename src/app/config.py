@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr
     metis_api_key: SecretStr
     db_path: str
+    langsmith_api_key: SecretStr
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

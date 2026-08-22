@@ -33,3 +33,5 @@ def build_graph(checkpointer=None):
     
 
     return workflow.compile(checkpointer)
+
+graph = build_graph()

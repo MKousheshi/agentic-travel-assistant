@@ -14,7 +14,7 @@ from app.prompts.correction import BOOKING_CORRECTION_PROMPT
 from app.utils import flatten_validation_errors
 from app.models import PlannerResponse, ExecutionPlan, Clarification
 from app.config import get_settings
-from app.agents import planner_agent
+from app.agents import planner_agent, planner_llm, PLANNER_PROMPT
 from app._capabilities import registery
 
 llm = ChatOpenAI(
@@ -30,23 +30,70 @@ llm = ChatOpenAI(
 )
 
 
-def create_plan(state: OverallState) -> Command:
-    messages = state["messages"]
-    plan = state.get("plan", None)
-    if plan:
-        errors = "plan has these errors:\n" + "\n".join(state.get("errors", []))
-        messages.append(AIMessage(plan.model_dump_json()))
-        messages.append(HumanMessage(errors))
+# def create_plan(state: OverallState) -> Command:
+#     messages = state["messages"]
+#     plan = state.get("plan", None)
+#     if plan:
+#         errs = state.get("errors", [])
+#         errors = "plan has these errors:\n" + "\n".join(errs) if errs else None
+#         messages.append(AIMessage(plan.model_dump_json()))
+#         messages.append(HumanMessage(errors))
 
-    result = planner_agent.invoke(InputAgentState(messages=messages))
-    response: PlannerResponse = result["structured_response"]
-    if type(response.response) is Clarification:
+
+#     result = planner_agent.invoke(InputAgentState(messages=messages))
+#     response: PlannerResponse = result["structured_response"]
+#     if type(response.response) is Clarification:
+#         return Command(
+#             update=response.response.model_dump()
+#             | {"messages": AIMessage(response.response.user_message)},
+#             goto="exit",
+#         )
+#     return Command(update={"plan": response.response}, goto="verify")
+@traceable
+def create_plan(state: OverallState) -> Command:
+    # Avoid mutating state["messages"] in place
+    messages = list(state["messages"])
+
+    previous_plan = state.get("plan")
+    if previous_plan:
+        errors = state.get("errors", [])
+
+        messages.append(AIMessage(content=previous_plan.model_dump_json()))
+
+        if errors:
+            messages.append(
+                HumanMessage(
+                    content=(
+                        "The previous plan failed verification.\n"
+                        f"Available capabilities: {[c.id for c in registery.all()]}\n"
+                        "Create a corrected plan based on these errors:\n"
+                        + "\n".join(f"- {error}" for error in errors)
+                    )
+                )
+            )
+
+    response: PlannerResponse = planner_llm.invoke(
+        [
+            SystemMessage(PLANNER_PROMPT),
+            *messages,
+        ]
+    )
+
+    if isinstance(response.response, Clarification):
+        clarification = response.response
+
         return Command(
-            update=response.response.model_dump()
-            | {"messages": AIMessage(response.response.user_message)},
+            update={
+                **clarification.model_dump(),
+                "messages": [AIMessage(content=clarification.user_message)],
+            },
             goto="exit",
         )
-    return Command(update={"plan": response.response}, goto="verify")
+
+    return Command(
+        update={"plan": response.response},
+        goto="verify",
+    )
 
 
 def verify_plan(state: OverallState) -> Command:

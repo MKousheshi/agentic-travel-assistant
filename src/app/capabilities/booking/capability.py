@@ -13,10 +13,11 @@ from app.chat_models import mini_model
 class BookingCapability(Capability):
     id: str = "booking"
     description: str = (
-        "Retrieve bookings by reference, search bookings by date or date range, "
-        "calculate booking counts and revenue for a period, "
-        "create new bookings with a reference, date, and total amount, and "
-        "delete bookings after checking dependencies."
+        "- Retrieve bookings by reference\n"
+        "- Search bookings by date or date range\n"
+        "- Calculate booking counts and revenue for a period\n"
+        "- Create new bookings with a reference, date, and total amount\n"
+        "- Delete bookings after checking dependencies"
     )
 
     def execute(self, plan_step: PlanStep, state: CapabilityState) -> dict:

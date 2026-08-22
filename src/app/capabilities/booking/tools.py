@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -135,8 +135,14 @@ def search_bookings(
         else:
             bookings = services.search_bookings_by_date_range(
                 session,
-                start_date=date_from,
-                end_date=date_to,
+                start_date=(
+                    datetime.combine(date_from, datetime.min.time())
+                    if date_from
+                    else None
+                ),
+                end_date=(
+                    datetime.combine(date_to, datetime.min.time()) if date_to else None
+                ),
                 limit=limit,
             )
 
@@ -177,12 +183,15 @@ def calculate_booking_analytics(
     Calculate revenue (total_amount sum) and booking count for a date range.
     """
     with Session(engine) as session:
-        summary = services.calculate_booking_revenue(session, start_date=date_from, end_date=date_to)
+        summary = services.calculate_booking_revenue(
+            session,
+            start_date=datetime.combine(date_from, datetime.min.time()),
+            end_date=datetime.combine(date_to, datetime.min.time()),
+        )
         return {
             "count": summary.booking_count,
             "revenue": summary.total_revenue,
         }
-    
 
 
 # ─────────────────────────────────────────────
@@ -193,9 +202,9 @@ def calculate_booking_analytics(
 class CreateBookingInput(BaseModel):
     book_ref: str = Field(
         ...,
-        min_length=1,
-        max_length=100,
-        description="Unique reference code for the new booking.",
+        min_length=6,
+        max_length=16,
+        description="Unique reference code for the new booking. Must be 6 letters length. Alphanumeric",
     )
     total_amount: Decimal = Field(
         ...,
@@ -218,16 +227,25 @@ def create_booking(
 ) -> dict:
     """
     Create a new booking with a unique book_ref, total_amount, and book_date.
-
-    The implementation should verify that book_ref does not already exist
-    before inserting the booking.
     """
-    # booking = booking_service.create(
-    #     book_ref=book_ref,
-    #     total_amount=total_amount,
-    #     book_date=book_date,
-    # )
-    pass
+    with Session(engine) as session:
+        try:
+            booking = services.create_booking(
+                session,
+                book_ref=book_ref,
+                book_date=datetime.combine(book_date, datetime.min.time()),
+                total_amount=total_amount,
+            )
+            return {
+                "message": "Booking created successfully",
+                "booking": serialize_booking(booking),
+            }
+        except Exception as e:
+            return {
+                "message": f"Failed to create booking: {str(e)}",
+                "booking": None,
+            }
+            
 
 
 # ─────────────────────────────────────────────
@@ -276,6 +294,6 @@ booking_tools = [
     get_booking_by_ref,
     search_bookings,
     calculate_booking_analytics,
-    # create_booking,
+    create_booking,
     # delete_booking_with_dependency_check,
 ]

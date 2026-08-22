@@ -45,7 +45,7 @@ class CapabilityRegistry:
 
         for capability in self._items.values():
             if capability.is_enabled:
-                lines.append(f"- {capability.id}: {capability.description}")
+                lines.append(f"- Capability ID: {capability.id}\n  Description: {capability.description}")
 
         return "\n".join(lines)
 
