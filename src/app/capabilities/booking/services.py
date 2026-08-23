@@ -1,36 +1,27 @@
 from dataclasses import dataclass
-from decimal import Decimal
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 
-from sqlalchemy import String, Numeric, DateTime, delete, func, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, func, select
+from app.db.schemas import Booking
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-class Booking(Base):
-    __tablename__ = "bookings"
-
-    book_ref: Mapped[str] = mapped_column(String(6), primary_key=True)
-    book_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-
-
-def get_booking_by_ref(session: Session, book_ref: str) -> Booking | None:
+def get_booking_by_ref(
+    session: Session,
+    book_ref: str,
+) -> Booking | None:
     """
     Return a booking by its 6-character reference, or None if not found.
 
     Raises:
         ValueError: If book_ref is not exactly 6 characters.
     """
-    if not isinstance(book_ref, str) or len(book_ref) != 6:
-        raise ValueError("book_ref must be a string of exactly 6 characters.")
+    if len(book_ref) != 6:
+        raise ValueError("book_ref must be exactly 6 characters long")
 
-    stmt = select(Booking).where(Booking.book_ref == book_ref)
-    return session.scalar(stmt)
+    statement = select(Booking).where(Booking.book_ref == book_ref)
+    return session.exec(statement).one_or_none()
 
 
 def search_bookings_by_date_range(
@@ -51,29 +42,26 @@ def search_bookings_by_date_range(
     Results are ordered newest-first.
     """
     if start_date is None and end_date is None:
-        raise ValueError("Provide at least one of start_date or end_date.")
+        raise ValueError("At least one of start_date or end_date is required")
+
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
 
     if start_date is not None and end_date is not None:
         if start_date > end_date:
-            raise ValueError("start_date must be earlier than or equal to end_date.")
+            raise ValueError("start_date cannot be later than end_date")
 
-    if not isinstance(limit, int) or isinstance(limit, bool):
-        raise ValueError("limit must be an integer.")
-
-    if not 1 <= limit <= 1_000:
-        raise ValueError("limit must be between 1 and 1000.")
-
-    stmt = select(Booking)
+    statement = select(Booking)
 
     if start_date is not None:
-        stmt = stmt.where(Booking.book_date >= start_date)
+        statement = statement.where(Booking.book_date >= start_date)
 
     if end_date is not None:
-        stmt = stmt.where(Booking.book_date <= end_date)
+        statement = statement.where(Booking.book_date <= end_date)
 
-    stmt = stmt.order_by(Booking.book_date.desc()).limit(limit)
+    statement = statement.order_by(Booking.book_date.desc()).limit(limit)
 
-    return list(session.scalars(stmt))
+    return list(session.exec(statement).all())
 
 
 def search_bookings_for_date(
@@ -88,29 +76,21 @@ def search_bookings_for_date(
     `booking_date` is interpreted as a UTC calendar date.
     Results are ordered newest-first.
     """
-    if isinstance(booking_date, datetime) or not isinstance(booking_date, date):
-        raise ValueError("booking_date must be a datetime.date, not a datetime.")
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
 
-    if not isinstance(limit, int) or isinstance(limit, bool):
-        raise ValueError("limit must be an integer.")
+    start_dt = datetime.combine(booking_date, time.min, tzinfo=timezone.utc)
+    end_dt = start_dt + timedelta(days=1)
 
-    if not 1 <= limit <= 1_000:
-        raise ValueError("limit must be between 1 and 1000.")
-
-    start = datetime.combine(booking_date, time.min, tzinfo=timezone.utc)
-    next_day = start + timedelta(days=1)
-
-    stmt = (
+    statement = (
         select(Booking)
-        .where(
-            Booking.book_date >= start,
-            Booking.book_date < next_day,
-        )
+        .where(Booking.book_date >= start_dt)
+        .where(Booking.book_date < end_dt)
         .order_by(Booking.book_date.desc())
         .limit(limit)
     )
 
-    return list(session.scalars(stmt))
+    return list(session.exec(statement).all())
 
 
 @dataclass(frozen=True)
@@ -137,26 +117,22 @@ def calculate_booking_revenue(
         booking_count = 0
         total_revenue = Decimal("0.00")
     """
-    if start_date is not None and end_date is not None:
-        if start_date > end_date:
-            raise ValueError("start_date must be earlier than or equal to end_date.")
-
-    stmt = select(
-        func.count(Booking.book_ref).label("booking_count"),
-        func.coalesce(func.sum(Booking.total_amount), 0).label("total_revenue"),
+    statement = select(
+        func.count(Booking.book_ref),
+        func.coalesce(func.sum(Booking.total_amount), Decimal("0.00")),
     )
 
     if start_date is not None:
-        stmt = stmt.where(Booking.book_date >= start_date)
+        statement = statement.where(Booking.book_date >= start_date)
 
     if end_date is not None:
-        stmt = stmt.where(Booking.book_date <= end_date)
+        statement = statement.where(Booking.book_date <= end_date)
 
-    row = session.execute(stmt).one()
+    booking_count, total_revenue = session.exec(statement).one()
 
     return BookingRevenueSummary(
-        booking_count=row.booking_count,
-        total_revenue=Decimal(row.total_revenue),
+        booking_count=int(booking_count or 0),
+        total_revenue=total_revenue or Decimal("0.00"),
     )
 
 
@@ -179,27 +155,6 @@ def create_booking(
 
     This function flushes but does not commit the outer transaction.
     """
-    if not isinstance(book_ref, str) or len(book_ref) != 6:
-        raise ValueError("book_ref must be a string of exactly 6 characters.")
-
-    if not isinstance(book_date, datetime):
-        raise ValueError("book_date must be a datetime.")
-
-    if not isinstance(total_amount, Decimal):
-        raise ValueError("total_amount must be a Decimal.")
-
-    if total_amount < Decimal("0.00"):
-        raise ValueError("total_amount cannot be negative.")
-
-    existing_booking = session.scalar(
-        select(Booking.book_ref).where(Booking.book_ref == book_ref)
-    )
-
-    if existing_booking is not None:
-        raise BookingAlreadyExistsError(
-            f"A booking with reference {book_ref!r} already exists."
-        )
-
     booking = Booking(
         book_ref=book_ref,
         book_date=book_date,
@@ -207,14 +162,16 @@ def create_booking(
     )
 
     try:
-        # A savepoint lets us handle a duplicate without rolling back an
-        # outer transaction that may be managed by the caller.
+        # A nested transaction uses a SAVEPOINT. If the flush fails, only the
+        # savepoint is rolled back and the caller's outer transaction remains
+        # usable.
         with session.begin_nested():
             session.add(booking)
-            session.flush()  # Executes INSERT now, so uniqueness is checked now.
+            session.flush()
+
     except IntegrityError as exc:
         raise BookingAlreadyExistsError(
-            f"A booking with reference {book_ref!r} already exists."
+            f"A booking with book_ref={book_ref!r} already exists"
         ) from exc
 
     return booking
@@ -234,15 +191,20 @@ def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
 
     The function flushes the DELETE but does not commit the transaction.
     """
-    print(f"[[ deleting {book_ref}]]")
-    if not isinstance(book_ref, str) or len(book_ref) != 6:
-        raise ValueError("book_ref must be a string of exactly 6 characters.")
+    if len(book_ref) != 6:
+        raise ValueError("book_ref must be exactly 6 characters long")
 
-    stmt = delete(Booking).where(Booking.book_ref == book_ref)
+    booking = session.exec(
+        select(Booking).where(Booking.book_ref == book_ref)
+    ).one_or_none()
 
-    result = session.execute(stmt)
+    if booking is None:
+        raise BookingNotFoundError(f"No booking found for book_ref={book_ref!r}")
 
-    if result.rowcount == 0:
-        raise BookingNotFoundError(f"No booking was found with reference {book_ref!r}.")
+    session.delete(booking)
 
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        # Usually only relevant if there are FK constraints or other DB-side issues.
+        raise

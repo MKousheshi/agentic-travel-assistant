@@ -4,24 +4,9 @@ from typing import Optional
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy.orm import Session
-from app.db import engine
+from sqlmodel import Session
+from app.db.engine import engine
 from app.capabilities.booking import services
-
-
-def serialize_booking(booking: services.Booking) -> dict:
-    """
-    Return only JSON-serializable, agent-safe booking fields.
-
-    Adjust these fields to match your Booking model.
-    """
-    return {
-        "book_ref": booking.book_ref,
-        "book_date": (booking.book_date.isoformat() if booking.book_date else None),
-        "total_amount": (
-            float(booking.total_amount) if booking.total_amount is not None else None
-        ),
-    }
 
 
 # ─────────────────────────────────────────────
@@ -54,7 +39,7 @@ def get_booking_by_ref(book_ref: str) -> dict:
 
         return {
             "found": True,
-            "booking": serialize_booking(booking),
+            "booking": booking.model_dump(),
             "message": "Booking retrieved successfully.",
         }
 
@@ -78,7 +63,7 @@ class SearchBookingsInput(BaseModel):
         description="End date of the search range in YYYY-MM-DD format.",
     )
     limit: int = Field(
-        default=50,
+        default=10,
         ge=1,
         le=200,
         description="Maximum number of booking records to return.",
@@ -148,7 +133,7 @@ def search_bookings(
 
     return {
         "count": len(bookings),
-        "bookings": [serialize_booking(booking) for booking in bookings],
+        "bookings": [booking.model_dump() for booking in bookings],
     }
 
 
@@ -238,7 +223,7 @@ def create_booking(
             )
             return {
                 "message": "Booking created successfully",
-                "booking": serialize_booking(booking),
+                "booking": booking.model_dump(),
             }
         except Exception as e:
             return {
@@ -274,13 +259,13 @@ def delete_booking_with_dependency_check(book_ref: str) -> dict:
             )
             session.commit()
             return {
-                'deleted': True,
+                "deleted": True,
                 "message": "Booking deleted successfully",
             }
         except Exception as e:
             session.rollback()
             return {
-                'deleted': False,
+                "deleted": False,
                 "message": f"Failed to delete booking. {str(e)}",
             }
 
