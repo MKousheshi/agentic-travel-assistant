@@ -119,9 +119,9 @@ def execution_router(state: OverallState) -> str:
     plan = state.get("plan", None)
     if not plan or not exec_state:
         return "exit"
-    if exec_state.status == "completed":
-        return "synth"
-    return "execution"
+    if exec_state.status == "running":
+        return "execution"
+    return "synth"
 
 
 @traceable

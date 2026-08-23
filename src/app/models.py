@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Dict, Literal, Union
 
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
@@ -180,3 +180,8 @@ class Feedback(BaseModel):
             "plan and do not include information unrelated to plan validation."
         )
     )
+
+class Confirmation(BaseModel):
+    message: str
+    data: Dict[str, Any]
+    confirmed: bool = False

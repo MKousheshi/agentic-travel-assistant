@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session
 from app.db.engine import engine
 from app.capabilities.booking import services
+from app.models import Confirmation
 
 # ─────────────────────────────────────────────
 # 1. Retrieve a booking by reference
@@ -250,7 +252,6 @@ def delete_booking_with_dependency_check(book_ref: str) -> dict:
     """
     Delete a booking only after checking all related/dependent records.
     """
-
     with Session(engine) as session:
         try:
             effect = services.preview_booking_deletion(session, book_ref=book_ref)
@@ -260,13 +261,15 @@ def delete_booking_with_dependency_check(book_ref: str) -> dict:
                 "deleted": False,
                 "message": f"Failed to delete booking. {str(e)}",
             }
-        # todo use a model for interrupt value
-        confirmation = interrupt(effect)
-        # todo use a model for confirmation result
-        if confirmation == "yes":
+        confirmation = Confirmation(
+            message="Proceed to delete booking?", data=asdict(effect)
+        )
+        result = interrupt(confirmation)
+        confirmation = Confirmation.model_validate(result)
+        if confirmation.confirmed:
             try:
                 services.delete_booking_by_ref(session, book_ref=book_ref)
-                session.commit()
+                session.commit()                
                 return {
                     "deleted": True,
                     "message": "Booking deleted successfully",

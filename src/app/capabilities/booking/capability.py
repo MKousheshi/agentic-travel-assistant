@@ -6,10 +6,11 @@ from langchain.agents.middleware.types import InputAgentState
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.errors import GraphRecursionError
 from langsmith import traceable
 
 from app.capabilities.capability import Capability, dict
-from app.models import PlanStep, CapabilityResult, CapabilityContext
+from app.models import PlanStep, CapabilityResult, CapabilityContext, CapabilityFailure
 from app.prompts.prompts import CAPABILITY_PROMPT
 from app.capabilities.booking.tools import booking_tools
 from app.chat_models import mini_model
@@ -28,13 +29,21 @@ class BookingCapability(Capability):
     def execute(
         self, step: PlanStep, context: CapabilityContext, config: RunnableConfig
     ) -> CapabilityResult:
-        return self._execute(step, context, config)
+        return self._execute(
+            step,
+            context,
+            {
+                **config,
+                "recursion_limit": 5,
+            },
+        )
 
     @traceable
     def _execute(
         self, step: PlanStep, context: CapabilityContext, config: RunnableConfig
     ) -> CapabilityResult:
         messages: list[AnyMessage | Dict[str, Any]] = [*context.messages]
+
         agent = create_agent(
             model=mini_model,
             tools=booking_tools,
@@ -45,9 +54,12 @@ class BookingCapability(Capability):
             ),
             response_format=ToolStrategy(CapabilityResult),
         )
-        result = agent.invoke(
-            InputAgentState(messages=messages),
-            config=config,
-        )
-        response: CapabilityResult = result["structured_response"]
-        return response
+        try:
+            result = agent.invoke(
+                InputAgentState(messages=messages),
+                config=config,
+            )
+            response: CapabilityResult = result["structured_response"]
+            return response
+        except GraphRecursionError as e:
+            return CapabilityFailure(message=str(e), reason=str(e), details={})

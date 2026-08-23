@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, func, select
+from sqlmodel import Session, delete, func, select
 from app.db.schemas import Booking, Ticket, TicketFlight, BoardingPass
 
 
@@ -183,17 +183,19 @@ class BookingNotFoundError(LookupError):
 
 def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
     """
-    Delete one booking by its reference.
+    Delete one booking by its reference and cascade-delete all related
+    tickets, ticket_flights, and boarding_passes.
 
     Raises:
         ValueError: If `book_ref` is not a 6-character string.
         BookingNotFoundError: If no matching booking exists.
 
-    The function flushes the DELETE but does not commit the transaction.
+    The function flushes the DELETE operations but does not commit the transaction.
     """
-    if len(book_ref) != 6:
+    if not isinstance(book_ref, str) or len(book_ref) != 6:
         raise ValueError("book_ref must be exactly 6 characters long")
 
+    # 1. Verify the booking exists
     booking = session.exec(
         select(Booking).where(Booking.book_ref == book_ref)
     ).one_or_none()
@@ -201,12 +203,30 @@ def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
     if booking is None:
         raise BookingNotFoundError(f"No booking found for book_ref={book_ref!r}")
 
-    session.delete(booking)
+    # Subquery identifying all ticket numbers belonging to this booking
+    ticket_subquery = select(Ticket.ticket_no).where(Ticket.book_ref == book_ref)
 
     try:
-        session.flush()
-    except IntegrityError as exc:
-        # Usually only relevant if there are FK constraints or other DB-side issues.
+        with session.begin_nested():
+            # 2. Delete boarding passes associated with this booking's tickets
+            session.exec(
+                delete(BoardingPass).where(BoardingPass.ticket_no.in_(ticket_subquery))
+            )
+
+            # 3. Delete ticket flights associated with this booking's tickets
+            session.exec(
+                delete(TicketFlight).where(TicketFlight.ticket_no.in_(ticket_subquery))
+            )
+
+            # 4. Delete the tickets themselves
+            session.exec(delete(Ticket).where(Ticket.book_ref == book_ref))
+
+            # 5. Delete the booking record
+            session.delete(booking)
+
+            session.flush()
+
+    except IntegrityError:
         raise
 
 

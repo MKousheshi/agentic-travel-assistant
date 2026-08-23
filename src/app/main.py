@@ -1,10 +1,11 @@
 import pprint
-from langgraph.types import Command
 import uuid
-from app.graph.build_graph import build_graph
+from langgraph.types import Command
 from langchain.messages import HumanMessage
-import chainlit as cl
 from langgraph.checkpoint.memory import MemorySaver
+import chainlit as cl
+from app.graph.build_graph import build_graph
+from app.models import Confirmation
 
 
 def format_node_output(node_output: dict) -> str:
@@ -39,10 +40,7 @@ async def on_chat_start():
 
 async def invoke_graph(graph, graph_input, config):
     final_response = None
-    actions = [
-        cl.Action(name="confirm", payload={}, label="Confirm"),
-        cl.Action(name="cancel", payload={}, label="Cancel"),
-    ]
+
     try:
         async for chunk in graph.astream(
             graph_input,
@@ -51,10 +49,31 @@ async def invoke_graph(graph, graph_input, config):
         ):
             if "__interrupt__" in chunk:
                 pending_interrupt = chunk["__interrupt__"][-1]
-                await cl.Message(
-                    content=str(pending_interrupt.value), actions=actions
-                ).send()
-                cl.user_session.set("interrupted", True)
+                val = pending_interrupt.value
+                match val:
+                    case Confirmation():
+                        actions = [
+                            cl.Action(
+                                name="confirm",
+                                payload=val.model_dump(),
+                                label="Confirm",
+                            ),
+                            cl.Action(
+                                name="cancel",
+                                payload=val.model_dump(),
+                                label="Cancel",
+                            ),
+                        ]
+                        await cl.Message(
+                            content=val.message + "\n" + str(val.data), actions=actions
+                        ).send()
+                    case _:
+                        actions = [
+                            cl.Action(name="confirm", payload={}, label="Confirm"),
+                            cl.Action(name="cancel", payload={}, label="Cancel"),
+                        ]
+                        await cl.Message(content=str(val), actions=actions).send()
+
                 continue
 
             for node_name, node_output in chunk.items():
@@ -78,14 +97,18 @@ async def invoke_graph(graph, graph_input, config):
 async def on_confirm(action: cl.Action):
     graph = cl.user_session.get("graph")
     config = cl.user_session.get("config")
-    await invoke_graph(graph, Command(resume="yes"), config)
+    confirmation: Confirmation = Confirmation(**action.payload)
+    confirmation.confirmed = True
+    await invoke_graph(graph, Command(resume=confirmation.model_dump()), config)
 
 
 @cl.action_callback("cancel")
 async def on_cancel(action: cl.Action):
     graph = cl.user_session.get("graph")
     config = cl.user_session.get("config")
-    await invoke_graph(graph, Command(resume="no"), config)
+    confirmation: Confirmation = Confirmation(**action.payload)
+    confirmation.confirmed = False
+    await invoke_graph(graph, Command(resume=confirmation.model_dump()), config)
 
 
 @cl.on_message
