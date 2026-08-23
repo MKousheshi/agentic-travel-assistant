@@ -9,8 +9,7 @@ from app.graph.nodes import (
     exit,
     execution_router,
     route_after_plan,
-    route_after_validation_rules,
-    route_after_validation_llm,
+    route_after_validation,
 )
 
 
@@ -28,8 +27,16 @@ def build_graph(checkpointer=None):
 
     workflow.add_edge(START, "planning")
     workflow.add_conditional_edges("planning", route_after_plan)
-    workflow.add_conditional_edges("verify-rules", route_after_validation_rules)
-    workflow.add_conditional_edges("verify-llm", route_after_validation_llm)
+    workflow.add_conditional_edges(
+        "verify-rules",
+        route_after_validation,
+        {"next": "verify-llm", "planning": "planning", "exit": "exit"},
+    )
+    workflow.add_conditional_edges(
+        "verify-llm",
+        route_after_validation,
+        {"next": "execution", "planning": "planning", "exit": "exit"},
+    )
 
     workflow.add_conditional_edges("execution", execution_router)
     workflow.add_edge("synth", "exit")

@@ -16,11 +16,12 @@ class ExecutionState(BaseModel):
     ] = "running"
     pending_question: str | None = None
 
+
 class OverallState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
     plan: ExecutionPlan
     feedback: Feedback
     execution: ExecutionState
     user_message: str
+    retries: int
     # state: Required[Literal["planning", "evaluation", "execution"]]
-

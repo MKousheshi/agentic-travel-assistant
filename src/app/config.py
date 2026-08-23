@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     db_path: str
     langsmith_api_key: SecretStr
     openai_base_url: str
+    max_planning_retries: int = 3
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

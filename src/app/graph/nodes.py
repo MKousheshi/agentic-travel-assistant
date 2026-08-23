@@ -12,6 +12,7 @@ from app.models import (
     CapabilityContext,
 )
 from app.agents import planner_agent, eval_agent
+from app.config import get_settings
 from app._capabilities import registry
 
 
@@ -51,6 +52,7 @@ def route_after_plan(state: OverallState) -> str:
 @traceable
 def validate_plan_by_rules(state: OverallState) -> dict:
     plan = state.get("plan", None)
+    retries = state.get("retries", 0)
     if not plan:
         return {}
     errors = []
@@ -61,17 +63,23 @@ def validate_plan_by_rules(state: OverallState) -> dict:
             f"capability id: {step.capability_id} for step: {step} does not exist."
         )
     if errors:
-        return {"feedback": Feedback(validated=False, message="\n".join(errors))}
+        return {
+            "feedback": Feedback(validated=False, message="\n".join(errors)),
+            "retries": retries + 1,
+        }
     return {"feedback": Feedback(validated=True, message="")}
 
 
 @traceable
-def route_after_validation_rules(state: OverallState) -> str:
+def route_after_validation(state: OverallState) -> str:
     feedback = state.get("feedback", None)
+    retries = state.get("retries", 0)
     if not feedback:
         return "exit"
     if feedback.validated:
-        return "verify-llm"
+        return "next"
+    if retries >= get_settings().max_planning_retries:
+        return "exit"
     return "planning"
 
 
@@ -79,23 +87,14 @@ def route_after_validation_rules(state: OverallState) -> str:
 def validate_plan_by_llm(state: OverallState) -> dict:
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     plan = state.get("plan", None)
+    retries = state.get("retries", 0)
     if not plan:
         raise Exception()
     messages.append(HumanMessage(content=f"Plan: {plan.model_dump_json()}"))
 
     result = eval_agent.invoke(InputAgentState(messages=messages))
     response: Feedback = result["structured_response"]
-    return {"feedback": response}
-
-
-@traceable
-def route_after_validation_llm(state: OverallState) -> str:
-    feedback = state.get("feedback", None)
-    if not feedback:
-        return "exit"
-    if feedback.validated:
-        return "execution"
-    return "planning"
+    return {"feedback": response, "retries": 0 if response.validated else retries + 1}
 
 
 # def build_capability_context(
