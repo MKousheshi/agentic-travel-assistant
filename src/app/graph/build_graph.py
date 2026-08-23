@@ -7,6 +7,7 @@ from app.graph.nodes import (
     synthesize,
     exit,
     execution_router,
+    route_after_plan,
 )
 
 
@@ -21,6 +22,7 @@ def build_graph(checkpointer=None):
     workflow.add_node("exit", exit)
 
     workflow.add_edge(START, "plan")
+    workflow.add_conditional_edges("plan", route_after_plan)
     workflow.add_conditional_edges("execution", execution_router)
     workflow.add_edge("synth", "exit")
     workflow.add_edge("exit", END)

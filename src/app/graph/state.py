@@ -7,7 +7,6 @@ from app.models import ExecutionPlan, ExecutionState, ResponseSynthesisInput
 class OverallState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
     plan: ExecutionPlan
+    feedback: str
     execution: ExecutionState
-    synthesis: ResponseSynthesisInput
     user_message: str
-    errors: List[str]

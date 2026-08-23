@@ -60,17 +60,37 @@ class Clarification(BaseModel):
     )
 
 
-class PlannerResponse(BaseModel):
-    kind: Literal["plan", "clarification"]
-    response: ExecutionPlan | Clarification = Field(
+class PlanResponse(BaseModel):
+    kind: Literal["plan"] = Field(
         description=(
-            "Return ExecutionPlan when the request can be planned safely with "
-            "the available capabilities and available user information. "
-            "Return Clarification when essential information is missing, the "
+            "Use 'plan' when the request can be planned safely with the "
+            "available capabilities and available user information."
+        )
+    )
+    response: ExecutionPlan = Field(
+        description=(
+            "The execution plan to return when the request is fully " "actionable."
+        )
+    )
+
+
+class ClarificationResponse(BaseModel):
+    kind: Literal["clarification"] = Field(
+        description=(
+            "Use 'clarification' when essential information is missing, the "
             "request is ambiguous, or the request cannot be fulfilled using "
             "the available capabilities."
         )
     )
+    response: Clarification = Field(
+        description=(
+            "A clarification request or explanation of why the request cannot "
+            "be fulfilled."
+        )
+    )
+
+
+PlannerResponse = Union[PlanResponse, ClarificationResponse]
 
 
 class StepExecution(BaseModel):

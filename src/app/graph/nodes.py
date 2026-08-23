@@ -1,83 +1,52 @@
-from typing import Any
+from typing import Any, Dict
 
-from langchain_openai import ChatOpenAI
-from langgraph.types import Command, interrupt
+from langchain.agents.middleware.types import InputAgentState
+from langgraph.types import Command
 from langsmith import traceable
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 from app.graph.state import OverallState
 from app.models import (
     PlannerResponse,
+    PlanResponse,
+    ClarificationResponse,
     ExecutionState,
-    Clarification,
-    CapabilityFailure,
-    StepExecution,
-    CapabilitySuccess,
-    CapabilityNeedsInformation,
     CapabilityContext,
 )
-from app.config import get_settings
-from app.agents import planner_llm, PLANNER_PROMPT
+from app.agents import planner_agent
 from app._capabilities import registry
-
-# TODO: set by config
-# llm = ChatOpenAI(
-#     model="deepseek/deepseek-v4-flash",
-#     api_key=get_settings().openrouter_api_key,
-#     base_url="https://openrouter.ai/api/v1",
-# )
-
-# llm = ChatOpenAI(
-#     model="gpt-4o-mini",
-#     api_key=get_settings().metis_api_key,
-#     base_url="https://api.metisai.ir/openai/v1",
-# )
 
 
 @traceable
-def create_plan(state: OverallState) -> Command:
-    # Avoid mutating state["messages"] in place
-    messages = list(state["messages"])
-
-    previous_plan = state.get("plan")
+def create_plan(state: OverallState) -> dict:
+    messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
+    previous_plan = state.get("plan", None)
+    feedback = state.get("feedback", None)
     if previous_plan:
-        errors = state.get("errors", [])
-
-        messages.append(AIMessage(content=previous_plan.model_dump_json()))
-
-        if errors:
-            messages.append(
-                HumanMessage(
-                    content=(
-                        "The previous plan failed verification.\n"
-                        f"Available capabilities: {[c.id for c in registry.all()]}\n"
-                        "Create a corrected plan based on these errors:\n"
-                        + "\n".join(f"- {error}" for error in errors)
-                    )
-                )
-            )
-
-    response: PlannerResponse = planner_llm.invoke(
-        [
-            SystemMessage(PLANNER_PROMPT),
-            *messages,
-        ]
-    )
-
-    if isinstance(response.response, Clarification):
-        clarification = response.response
-
-        return Command(
-            update={
-                **clarification.model_dump(),
-                "messages": [AIMessage(content=clarification.user_message)],
-            },
-            goto="exit",
+        messages.append(
+            AIMessage(content=f"Previous plan: {previous_plan.model_dump_json()}")
         )
+    if feedback:
+        messages.append(HumanMessage(content=f"Feedback: {feedback}"))
 
-    return Command(
-        update={"plan": response.response},
-        goto="verify",
-    )
+    result = planner_agent.invoke(InputAgentState(messages=messages))
+    response: PlannerResponse = result["structured_response"]
+    match response:
+        case PlanResponse(kind="plan", response=plan):
+            return {"plan": plan}
+
+        case ClarificationResponse(kind="clarification", response=clarification):
+            return {
+                "user_message": clarification.user_message,
+                "messages": [AIMessage(content=clarification.user_message)],
+            }
+
+
+@traceable
+def route_after_plan(state: OverallState) -> str:
+    plan = state.get("plan", None)
+    if not plan:
+        return "exit"
+    return "verify"
 
 
 @traceable
@@ -159,10 +128,10 @@ def synthesize(state: OverallState) -> dict:
         return {}
     match (execution.status):
         case "completed":
-            #todo use llm
+            # todo use llm
             return {"user_message": execution.results}
         case "failed":
-            #todo
+            # todo
             return {}
         case "waiting_for_user":
             return {"user_message": execution.pending_question}

@@ -3,12 +3,14 @@ from app.config import get_settings
 
 mini_model = ChatOpenAI(
     model="gpt-4o-mini",
-    api_key=get_settings().metis_api_key,
-    base_url="https://api.metisai.ir/openai/v1",
+    api_key=get_settings().openai_api_key,
+    base_url=get_settings().openai_base_url,
 )
 model = ChatOpenAI(
     model="gpt-4o",
-    api_key=get_settings().metis_api_key,
-    base_url="https://api.metisai.ir/openai/v1",
+    api_key=get_settings().openai_api_key,
+    base_url=get_settings().openai_base_url,
 )
+
+
 plan_model = mini_model
