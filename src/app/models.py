@@ -105,18 +105,6 @@ class StepExecution(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
-class ExecutionState(BaseModel):
-    current_step_index: int = 0
-    results: list[dict[str, Any]] = Field(default_factory=list)
-    status: Literal[
-        "running",
-        "waiting_for_user",
-        "failed",
-        "completed",
-    ] = "running"
-    pending_question: str | None = None
-
-
 class CapabilitySuccess(BaseModel):
     status: Literal["success"] = "success"
     message: str = Field(
@@ -148,10 +136,6 @@ class CapabilityFailure(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-# CapabilityResult = Annotated[
-#     CapabilitySuccess | CapabilityNeedsInformation | CapabilityFailure,
-#     Field(discriminator="status"),
-# ]
 CapabilityResult = Union[
     CapabilitySuccess, CapabilityNeedsInformation, CapabilityFailure
 ]
@@ -175,3 +159,24 @@ class ResponseSynthesisInput(BaseModel):
 
 class ResponseSynthesis(BaseModel):
     user_message: str
+
+
+class Feedback(BaseModel):
+    validated: bool = Field(
+        description=(
+            "Whether the execution plan is valid and sufficiently satisfies "
+            "the user's request. Set to true only when the plan is safe, "
+            "complete, logically ordered, and executable using the available "
+            "capabilities."
+        )
+    )
+
+    message: str = Field(
+        description=(
+            "A concise validation result. If validated is true, briefly state "
+            "that the plan is valid. If validated is false, explain the exact "
+            "problems that must be corrected, including the affected step or "
+            "steps and the required change. Do not propose a completely new "
+            "plan and do not include information unrelated to plan validation."
+        )
+    )

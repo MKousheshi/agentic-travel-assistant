@@ -1,18 +1,17 @@
 from typing import Any, Dict
 
 from langchain.agents.middleware.types import InputAgentState
-from langgraph.types import Command
 from langsmith import traceable
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
-from app.graph.state import OverallState
+from app.graph.state import OverallState, ExecutionState
 from app.models import (
     PlannerResponse,
     PlanResponse,
     ClarificationResponse,
-    ExecutionState,
+    Feedback,
     CapabilityContext,
 )
-from app.agents import planner_agent
+from app.agents import planner_agent, eval_agent
 from app._capabilities import registry
 
 
@@ -32,7 +31,7 @@ def create_plan(state: OverallState) -> dict:
     response: PlannerResponse = result["structured_response"]
     match response:
         case PlanResponse(kind="plan", response=plan):
-            return {"plan": plan}
+            return {"plan": plan, "execution": ExecutionState()}
 
         case ClarificationResponse(kind="clarification", response=clarification):
             return {
@@ -46,12 +45,14 @@ def route_after_plan(state: OverallState) -> str:
     plan = state.get("plan", None)
     if not plan:
         return "exit"
-    return "verify"
+    return "verify-rules"
 
 
 @traceable
-def verify_plan(state: OverallState) -> Command:
-    plan = state["plan"]
+def validate_plan_by_rules(state: OverallState) -> dict:
+    plan = state.get("plan", None)
+    if not plan:
+        return {}
     errors = []
     for step in plan.steps:
         if registry.has(step.capability_id):
@@ -60,8 +61,41 @@ def verify_plan(state: OverallState) -> Command:
             f"capability id: {step.capability_id} for step: {step} does not exist."
         )
     if errors:
-        return Command(update={"errors": errors}, goto="plan")
-    return Command(goto="execution", update={"execution": ExecutionState()})
+        return {"feedback": Feedback(validated=False, message="\n".join(errors))}
+    return {"feedback": Feedback(validated=True, message="")}
+
+
+@traceable
+def route_after_validation_rules(state: OverallState) -> str:
+    feedback = state.get("feedback", None)
+    if not feedback:
+        return "exit"
+    if feedback.validated:
+        return "verify-llm"
+    return "planning"
+
+
+@traceable
+def validate_plan_by_llm(state: OverallState) -> dict:
+    messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
+    plan = state.get("plan", None)
+    if not plan:
+        raise Exception()
+    messages.append(HumanMessage(content=f"Plan: {plan.model_dump_json()}"))
+
+    result = eval_agent.invoke(InputAgentState(messages=messages))
+    response: Feedback = result["structured_response"]
+    return {"feedback": response}
+
+
+@traceable
+def route_after_validation_llm(state: OverallState) -> str:
+    feedback = state.get("feedback", None)
+    if not feedback:
+        return "exit"
+    if feedback.validated:
+        return "execution"
+    return "planning"
 
 
 # def build_capability_context(

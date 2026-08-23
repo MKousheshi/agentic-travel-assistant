@@ -1,12 +1,26 @@
-from typing import Annotated, List, Required, TypedDict, Optional, Any
+from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from app.models import ExecutionPlan, ExecutionState, ResponseSynthesisInput
+from pydantic import BaseModel, Field
+from app.models import ExecutionPlan, Feedback
 
+
+class ExecutionState(BaseModel):
+    current_step_index: int = 0
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    status: Literal[
+        "running",
+        "waiting_for_user",
+        "failed",
+        "completed",
+    ] = "running"
+    pending_question: str | None = None
 
 class OverallState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
     plan: ExecutionPlan
-    feedback: str
+    feedback: Feedback
     execution: ExecutionState
     user_message: str
+    # state: Required[Literal["planning", "evaluation", "execution"]]
+
