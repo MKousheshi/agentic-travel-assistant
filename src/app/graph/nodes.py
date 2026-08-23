@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 from langchain.agents.middleware.types import InputAgentState
+from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 from app.graph.state import OverallState, ExecutionState
@@ -124,7 +125,7 @@ def execution_router(state: OverallState) -> str:
 
 
 @traceable
-def execute_plan(state: OverallState) -> dict:
+def execute_plan(state: OverallState, config: RunnableConfig) -> dict:
     exec_state = state.get("execution", None)
     plan = state.get("plan", None)
     if not plan or not exec_state:
@@ -137,7 +138,7 @@ def execute_plan(state: OverallState) -> dict:
     context = CapabilityContext(
         messages=state["messages"], prior_results=exec_state.results
     )
-    result = capability.execute(step, context)
+    result = capability.execute(step, context, config=config)
     next_exec_state = exec_state.model_copy()
     match (result.status):
         case "success":

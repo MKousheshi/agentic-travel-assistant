@@ -5,6 +5,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware.types import InputAgentState
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AnyMessage
+from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 
 from app.capabilities.capability import Capability, dict
@@ -24,11 +25,15 @@ class BookingCapability(Capability):
         "- Delete bookings"
     )
 
-    def execute(self, step: PlanStep, context: CapabilityContext) -> CapabilityResult:
-        return self._execute(step, context)
+    def execute(
+        self, step: PlanStep, context: CapabilityContext, config: RunnableConfig
+    ) -> CapabilityResult:
+        return self._execute(step, context, config)
 
     @traceable
-    def _execute(self, step: PlanStep, context: CapabilityContext) -> CapabilityResult:
+    def _execute(
+        self, step: PlanStep, context: CapabilityContext, config: RunnableConfig
+    ) -> CapabilityResult:
         messages: list[AnyMessage | Dict[str, Any]] = [*context.messages]
         agent = create_agent(
             model=mini_model,
@@ -40,6 +45,9 @@ class BookingCapability(Capability):
             ),
             response_format=ToolStrategy(CapabilityResult),
         )
-        result = agent.invoke(InputAgentState(messages=messages))
+        result = agent.invoke(
+            InputAgentState(messages=messages),
+            config=config,
+        )
         response: CapabilityResult = result["structured_response"]
         return response

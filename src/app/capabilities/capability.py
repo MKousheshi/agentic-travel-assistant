@@ -1,6 +1,7 @@
 from typing import Dict
 
 from langchain_core.messages import AnyMessage
+from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 from pydantic import BaseModel, Field
 from app.models import PlanStep, CapabilityResult, CapabilityContext
@@ -15,7 +16,7 @@ class Capability(BaseModel):
     description: str
     is_enabled: bool = Field(default=True)
 
-    def execute(self, step: PlanStep, context: CapabilityContext) -> CapabilityResult:
+    def execute(self, step: PlanStep, context: CapabilityContext, config: RunnableConfig) -> CapabilityResult:
         raise NotImplementedError
 
 

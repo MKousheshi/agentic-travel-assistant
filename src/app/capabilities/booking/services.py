@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
-from app.db.schemas import Booking
+from app.db.schemas import Booking, Ticket, TicketFlight, BoardingPass
 
 
 def get_booking_by_ref(
@@ -208,3 +208,71 @@ def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
     except IntegrityError as exc:
         # Usually only relevant if there are FK constraints or other DB-side issues.
         raise
+
+
+@dataclass(frozen=True)
+class BookingDeleteEffect:
+    book_ref: str
+    booking_exists: bool
+    booking_count: int
+    ticket_count: int
+    ticket_flight_count: int
+    boarding_pass_count: int
+
+    @property
+    def total_record_count(self) -> int:
+        """Total number of records that would be deleted."""
+        return (
+            self.booking_count
+            + self.ticket_count
+            + self.ticket_flight_count
+            + self.boarding_pass_count
+        )
+
+
+def preview_booking_deletion(
+    session: Session,
+    *,
+    book_ref: str,
+) -> BookingDeleteEffect:
+    """
+    Report the records that would be affected by deleting a booking.
+
+    This function does not delete or modify anything.
+
+    Raises:
+        ValueError: If `book_ref` is not a 6-character string.
+    """
+    if not isinstance(book_ref, str) or len(book_ref) != 6:
+        raise ValueError("book_ref must be exactly 6 characters long")
+
+    booking_exists = session.exec(
+        select(func.count()).select_from(Booking).where(Booking.book_ref == book_ref)
+    ).one()
+
+    ticket_count = session.exec(
+        select(func.count()).select_from(Ticket).where(Ticket.book_ref == book_ref)
+    ).one()
+
+    ticket_flight_count = session.exec(
+        select(func.count())
+        .select_from(TicketFlight)
+        .join(Ticket, Ticket.ticket_no == TicketFlight.ticket_no)
+        .where(Ticket.book_ref == book_ref)
+    ).one()
+
+    boarding_pass_count = session.exec(
+        select(func.count())
+        .select_from(BoardingPass)
+        .join(Ticket, Ticket.ticket_no == BoardingPass.ticket_no)
+        .where(Ticket.book_ref == book_ref)
+    ).one()
+
+    return BookingDeleteEffect(
+        book_ref=book_ref,
+        booking_exists=bool(booking_exists),
+        booking_count=int(booking_exists),
+        ticket_count=int(ticket_count),
+        ticket_flight_count=int(ticket_flight_count),
+        boarding_pass_count=int(boarding_pass_count),
+    )
