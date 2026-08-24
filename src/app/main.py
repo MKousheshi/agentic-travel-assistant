@@ -1,3 +1,6 @@
+from app.registry import load_capabilities
+load_capabilities()
+
 import pprint
 import uuid
 from langgraph.types import Command

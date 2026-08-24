@@ -4,8 +4,6 @@ from langchain.agents.middleware.types import InputAgentState
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
-from sqlalchemy.orm import SessionTransaction
-from sqlmodel import Session
 from app.graph.state import WorkflowState, ExecutionState
 from app.models import (
     PlannerResponse,
@@ -16,12 +14,12 @@ from app.models import (
 )
 from app.agents import planner_agent, eval_agent
 from app.config import get_settings
-from app._capabilities import registry
-from app.db.engine import engine
+from app.registry import registry
 
 
 @traceable
 def create_plan(state: WorkflowState) -> dict:
+    print(registry.catalog())
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
@@ -157,10 +155,11 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     capability = registry.get(step.capability_id)
     if not capability:
         raise ReferenceError(f"Capability {step.capability_id} not found")
+    # todo
     context = CapabilityContext(
         messages=state["messages"], prior_results=execution.results
     )
-    result = capability.execute(step, context, config=config)
+    result = capability.execute(step, {"messages": state["messages"]}, config)
     next_exec_state = execution.model_copy()
     match (result.status):
         case "success":
