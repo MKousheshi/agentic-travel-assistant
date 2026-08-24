@@ -17,7 +17,6 @@ from app.chat_models import mini_model
 from app.registry import register_capability
 
 
-
 @register_capability(
     id="weather",
     description=(
@@ -31,7 +30,7 @@ def weather_capability(
     step: PlanStep, state: dict, config: RunnableConfig
 ) -> CapabilityResult:
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
-
+    config = config | {"recursion_limit": 10}
     agent = create_agent(
         model=mini_model,
         tools=weather_tools,

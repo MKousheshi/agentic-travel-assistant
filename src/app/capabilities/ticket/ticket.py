@@ -32,7 +32,7 @@ def ticket_capability(
     step: PlanStep, state: dict, config: RunnableConfig
 ) -> CapabilityResult:
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
-
+    config = config | {"recursion_limit": 10}
     agent = create_agent(
         model=mini_model,
         tools=ticket_tools,

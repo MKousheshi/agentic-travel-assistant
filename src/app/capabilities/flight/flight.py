@@ -28,9 +28,11 @@ from app.registry import register_capability
         "- Analyze high-traffic routes and their associated revenue\n"
     ),
 )
-def flight_capability(step: PlanStep, state: dict, config: RunnableConfig) -> CapabilityResult:
+def flight_capability(
+    step: PlanStep, state: dict, config: RunnableConfig
+) -> CapabilityResult:
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
-
+    config = config | {"recursion_limit": 10}
     agent = create_agent(
         model=mini_model,
         tools=flight_tools,
