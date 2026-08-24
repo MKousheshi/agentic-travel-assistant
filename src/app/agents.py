@@ -4,7 +4,7 @@ from langchain.agents.structured_output import ToolStrategy
 from app.models import PlannerResponse, Feedback
 from app.chat_models import plan_model, mini_model
 from app.registry import registry
-from app.prompts.prompts import VALIDATOR_SYSTEM_PROMPT
+from app.prompts.validator import VALIDATOR_SYSTEM_PROMPT
 from app.prompts.planner import PLANNER_SYSTEM_PROMPT
 from app.prompts.synthesizer import SYNTHESIZER_PROMPT
 

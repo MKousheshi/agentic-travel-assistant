@@ -37,6 +37,11 @@ async def on_chat_start():
     thread_id = str(uuid.uuid4())
 
     graph = build_graph(MemorySaver())
+    
+    png_bytes = graph.get_graph().draw_mermaid_png()
+
+    with open("workflow.png", "wb") as f:
+        f.write(png_bytes)
     session = Session(engine)
     config = {"configurable": {"thread_id": thread_id, "session": session}}
 

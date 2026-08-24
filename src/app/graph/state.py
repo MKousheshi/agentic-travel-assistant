@@ -25,4 +25,4 @@ class WorkflowState(TypedDict, total=False):
     execution: ExecutionState
     user_message: str
     retries: int
-    # state: Required[Literal["planning", "evaluation", "execution"]]
+    

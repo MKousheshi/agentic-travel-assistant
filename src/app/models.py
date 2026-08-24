@@ -163,10 +163,6 @@ CapabilityResult = Union[
 ]
 
 
-class CapabilityContext(BaseModel):
-    messages: list[AnyMessage]
-    prior_results: list[dict[str, Any]]
-
 
 class ResponseSynthesisInput(BaseModel):
     outcome: Literal[

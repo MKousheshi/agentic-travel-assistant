@@ -163,3 +163,4 @@ private/
 .chainlit
 .files
 .vscode
+.langgraph_api

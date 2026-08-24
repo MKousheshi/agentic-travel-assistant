@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
 from langchain.agents.middleware.types import InputAgentState
 from langchain_core.runnables import RunnableConfig
@@ -10,7 +10,6 @@ from app.models import (
     PlanResponse,
     ClarificationResponse,
     Feedback,
-    CapabilityContext,
     StepResult,
 )
 from app.agents import planner_agent, eval_agent, synthesizer_model
@@ -20,7 +19,7 @@ from app.prompts.synthesizer import SYNTHESIZER_PROMPT
 
 
 @traceable
-def route_from_start(state: WorkflowState) -> str:
+def route_from_start(state: WorkflowState) -> Literal["execution", "planning"]:
     execution = state.get("execution")
     if execution:
         return "execution"
@@ -54,7 +53,7 @@ def create_plan(state: WorkflowState) -> dict:
 
 
 @traceable
-def route_after_plan(state: WorkflowState) -> str:
+def route_after_plan(state: WorkflowState) -> Literal["exit", "verify-rules"]:
     plan = state.get("plan", None)
     if not plan:
         return "exit"
@@ -89,7 +88,7 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
 
 
 @traceable
-def route_after_validation(state: WorkflowState) -> str:
+def route_after_validation(state: WorkflowState) -> Literal["exit", "next", "planning"]:
     feedback = state.get("feedback", None)
     retries = state.get("retries", 0)
     if not feedback:
@@ -115,21 +114,6 @@ def validate_plan_by_llm(state: WorkflowState) -> dict:
     return {"feedback": response, "retries": 0 if response.validated else retries + 1}
 
 
-# def build_capability_context(
-#     state: OverallState,
-#     execution: ExecutionState,
-# ) -> dict[str, Any]:
-#     return {
-#         "messages": state.get("messages", []),
-#         "completed_steps": [item.model_dump() for item in execution.completed_steps],
-#         "results": {
-#             item.capability_id: item.result
-#             for item in execution.completed_steps
-#             if item.status == "success"
-#         },
-#     }
-
-
 @traceable
 def execution_init(state: WorkflowState, config: RunnableConfig) -> dict:
     session = config.get("configurable", {}).get("session", None)
@@ -140,7 +124,9 @@ def execution_init(state: WorkflowState, config: RunnableConfig) -> dict:
 
 
 @traceable
-def execution_router(state: WorkflowState, config: RunnableConfig) -> str:
+def execution_router(
+    state: WorkflowState, config: RunnableConfig
+) -> Literal["exit", "execution", "synth"]:
     execution = state.get("execution", None)
     session = config.get("configurable", {}).get("session", None)
 
@@ -169,11 +155,14 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     capability = registry.get(step.capability_id)
     if not capability:
         raise ReferenceError(f"Capability {step.capability_id} not found")
-    # todo
-    # context = CapabilityContext(
-    #     messages=state["messages"], prior_results=execution.results
-    # )
-    result = capability.execute(step, {"messages": state["messages"]}, config)
+    result = capability.execute(
+        step,
+        {
+            "messages": state["messages"]
+            + [AIMessage(result.model_dump_json()) for result in execution.results]
+        },
+        config,
+    )
     next_exec_state = execution.model_copy()
     match (result.status):
         case "success":
