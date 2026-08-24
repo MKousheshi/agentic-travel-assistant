@@ -19,7 +19,6 @@ from app.registry import registry
 
 @traceable
 def create_plan(state: WorkflowState) -> dict:
-    print(registry.catalog())
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
@@ -40,6 +39,7 @@ def create_plan(state: WorkflowState) -> dict:
             return {
                 "user_message": clarification.user_message,
                 "messages": [AIMessage(content=clarification.user_message)],
+                "plan": None,
             }
 
 
