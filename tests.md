@@ -32,9 +32,20 @@
 ```text
 جستجوی صحیح بدون انتقال داده غیرضروری
 ```
+|ticket_no|flight_id|fare_conditions|amount|
+|---------|---------|---------------|------|
+|0005435839925|5997|Economy|66400|
+|0005435839925|18070|Economy|66400|
+
+|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
+|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
+|5997|PG0703|2017-08-18 17:15:00+03|2017-08-19 02:00:00+03|SVO|UUS|Scheduled|319|\N|\N|
+|18070|PG0704|2017-08-28 10:45:00+03|2017-08-28 19:30:00+03|UUS|SVO|Scheduled|319|\N|\N|
+
+
 **Status:** passed
 
-**Logs:** 
+**Logs:** fare conditions are not mentioned
 
 ---
 
@@ -48,7 +59,20 @@
 ```text
 پیدا کردن پروازهای مسیر مشخص
 ```
-**Status:** not tested
+|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
+|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
+|5241|PG0472|2017-09-07 18:30:00+03|2017-09-07 19:20:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5240|PG0468|2017-08-22 13:15:00+03|2017-08-22 14:05:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5239|PG0469|2017-08-22 12:35:00+03|2017-08-22 13:25:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5238|PG0470|2017-08-22 10:20:00+03|2017-08-22 11:10:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5237|PG0471|2017-08-22 18:40:00+03|2017-08-22 19:30:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5236|PG0472|2017-08-22 18:30:00+03|2017-08-22 19:20:00+03|SVO|LED|Scheduled|321|\N|\N|
+|5235|PG0469|2017-07-26 12:35:00+03|2017-07-26 13:25:00+03|SVO|LED|Arrived|321|2017-07-26 12:38:00+03|2017-07-26 13:27:00+03|
+|5234|PG0472|2017-08-26 18:30:00+03|2017-08-26 19:20:00+03|SVO|LED|Scheduled|321|\N|\N| 
+
+
+
+**Status:** passed
 
 **Logs:**
 
@@ -58,12 +82,16 @@
 
 **Prompt:**
 ```text
-وضعیت flight_id مشخص چیست؟
+وضعیت پرواز 33101 چیست؟
 ```
 **Expected:**
 ```text
 نمایش status و اطلاعات مرتبط
 ```
+|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
+|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
+|33101|PG0063|2017-07-20 19:25:00+03|2017-07-20 20:10:00+03|SKX|SVO|Arrived|CR2|2017-07-20 19:28:00+03|2017-07-20 20:13:00+03|
+
 **Status:** not tested
 
 **Logs:**
@@ -74,7 +102,7 @@
 
 **Prompt:**
 ```text
-هوا در شهر مقصد flight_no مشخص چطور است؟
+هوا در شهر مقصد PG0063 مشخص چطور است؟
 ```
 **Expected:**
 ```text

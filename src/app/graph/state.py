@@ -1,15 +1,13 @@
 from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field, ConfigDict
-from sqlmodel import Session
-from sqlalchemy.orm import SessionTransaction
-from app.models import ExecutionPlan, Feedback
+from pydantic import BaseModel, Field
+from app.models import ExecutionPlan, Feedback, StepResult
 
 
 class ExecutionState(BaseModel):
     current_step_index: int = 0
-    results: list[dict[str, Any]] = Field(default_factory=list)
+    results: list[StepResult] = Field(default_factory=list)
     status: Literal[
         "running",
         "waiting_for_user",

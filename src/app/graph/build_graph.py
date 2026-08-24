@@ -33,7 +33,7 @@ def build_graph(checkpointer=None):
     workflow.add_conditional_edges(
         "verify-rules",
         route_after_validation,
-        {"next": "execution-init", "planning": "planning", "exit": "exit"},
+        {"next": "verify-llm", "planning": "planning", "exit": "exit"},
     )
     workflow.add_conditional_edges(
         "verify-llm",

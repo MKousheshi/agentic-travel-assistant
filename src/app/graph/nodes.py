@@ -3,7 +3,7 @@ from typing import Any, Dict
 from langchain.agents.middleware.types import InputAgentState
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
-from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, SystemMessage
 from app.graph.state import WorkflowState, ExecutionState
 from app.models import (
     PlannerResponse,
@@ -11,10 +11,12 @@ from app.models import (
     ClarificationResponse,
     Feedback,
     CapabilityContext,
+    StepResult,
 )
-from app.agents import planner_agent, eval_agent
+from app.agents import planner_agent, eval_agent, synthesizer_model
 from app.config import get_settings
 from app.registry import registry
+from app.prompts.synthesizer import SYNTHESIZER_PROMPT
 
 
 @traceable
@@ -68,12 +70,16 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
     errors = []
     if not plan.steps:
         errors.append("plan is empty, no steps found.")
+    ids = {}
     for step in plan.steps:
-        if registry.has(step.capability_id):
-            continue
-        errors.append(
-            f"capability id: {step.capability_id} for step: {step} does not exist."
-        )
+        if step.step_id in ids:
+            errors.append(
+                f"error in step with step_id {step.step_id}! step_id is not unique in the plan!"
+            )
+        if not registry.has(step.capability_id):
+            errors.append(
+                f"error in step with step_id {step.step_id}! capability id: {step.capability_id} does not exist."
+            )
     if errors:
         return {
             "feedback": Feedback(validated=False, message="\n".join(errors)),
@@ -164,14 +170,16 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     if not capability:
         raise ReferenceError(f"Capability {step.capability_id} not found")
     # todo
-    context = CapabilityContext(
-        messages=state["messages"], prior_results=execution.results
-    )
+    # context = CapabilityContext(
+    #     messages=state["messages"], prior_results=execution.results
+    # )
     result = capability.execute(step, {"messages": state["messages"]}, config)
     next_exec_state = execution.model_copy()
     match (result.status):
         case "success":
-            next_exec_state.results.append(result.data)
+            next_exec_state.results.append(
+                StepResult(message=result.message, data=result.data, step=step)
+            )
             next_exec_state.current_step_index += 1
             if next_exec_state.current_step_index == len(plan.steps):
                 next_exec_state.status = "completed"
@@ -188,12 +196,26 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
 @traceable
 def synthesize(state: WorkflowState) -> dict:
     execution = state.get("execution")
-    if not execution:
+    plan = state.get("plan")
+
+    if not execution or not plan:
         return {}
     match (execution.status):
         case "completed":
-            # todo use llm
-            return {"user_message": execution.results}
+            response = synthesizer_model.invoke(
+                [
+                    SystemMessage(
+                        SYNTHESIZER_PROMPT.format(
+                            **{
+                                "user_request": plan.user_query,
+                                "conversation": state["messages"],
+                                "step_results": execution.results,
+                            }
+                        )
+                    )
+                ]
+            )
+            return {"user_message": response.content}
         case "failed":
             # todo
             return {"user_message": execution.pending_question}

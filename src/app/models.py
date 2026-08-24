@@ -1,10 +1,12 @@
-from typing import Annotated, Any, Dict, Literal, Union
+from uuid import UUID, uuid4
+from typing import Any, Dict, Literal, Union
 
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
+from pydantic.v1.typing import AnyArgTCallable
 
 
-class PlanStep(BaseModel):
+class PlanStepDraft(BaseModel):
     capability_id: str = Field(
         description=(
             "The exact ID of a capability from the provided capability catalog "
@@ -33,7 +35,27 @@ class PlanStep(BaseModel):
     )
 
 
+class PlanStep(PlanStepDraft):
+    step_id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique identifier generated for this plan step.",
+    )
+
+
+class StepResult(BaseModel):
+    message: str
+    data: dict[str, Any]
+    step: PlanStep
+
+
 class ExecutionPlan(BaseModel):
+    user_query: str = Field(
+        min_length=1,
+        description=(
+            "The user's original request, preserved verbatim. Do not rewrite, "
+            "summarize, or add assumptions."
+        ),
+    )
     goal: str = Field(
         description=(
             "A concise statement of the user goal that this execution plan "
@@ -180,6 +202,7 @@ class Feedback(BaseModel):
             "plan and do not include information unrelated to plan validation."
         )
     )
+
 
 class Confirmation(BaseModel):
     message: str
