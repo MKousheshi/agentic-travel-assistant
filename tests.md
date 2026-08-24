@@ -28,9 +28,9 @@
 ```text
 جستجوی صحیح بدون انتقال داده غیرضروری
 ```
-**Status:** failed
+**Status:** passed
 
-**Logs:** not implemented
+**Logs:** 
 
 ---
 
@@ -269,6 +269,39 @@ partial success و گزارش failure واضح
 برخورد با داده به‌عنوان untrusted input و عدم اجرای آن به‌عنوان instruction
 ```
 **Status:** not tested
+
+**Logs:**
+
+---
+
+
+## Flight
+
+**Prompt:**
+```text
+اطلاعات پرواز 1185 را به من بده.
+```
+**Expected:**
+|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
+|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
+|1185|PG0134|2017-09-10 09:50:00+03|2017-09-10 14:55:00+03|DME|BTK|Scheduled|319|\N|\N|
+
+**Status:** passed
+
+**Logs:**
+
+---
+
+**Prompt:**
+```text
+اطلاعات پرواز PG0010 چیست؟
+```
+**Expected:**
+|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
+|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
+|16837|PG0010|2017-09-05 12:25:00+03|2017-09-05 14:35:00+03|JOK|VKO|Scheduled|CN1|\N|\N|
+
+**Status:** failed
 
 **Logs:**
 

@@ -7,7 +7,7 @@ from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
-
+from langsmith import traceable
 from app.models import PlanStep, CapabilityResult, CapabilityFailure
 from app.prompts.capability import CAPABILITY_PROMPT
 from app.capabilities.booking.tools import booking_tools
@@ -25,9 +25,12 @@ from app.registry import register_capability
         "- Delete bookings"
     ),
 )
-def booking_capability(step: PlanStep, state: dict, config: RunnableConfig) -> CapabilityResult:
+@traceable
+def booking_capability(
+    step: PlanStep, state: dict, config: RunnableConfig
+) -> CapabilityResult:
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
-    
+
     agent = create_agent(
         model=mini_model,
         tools=booking_tools,
@@ -47,4 +50,3 @@ def booking_capability(step: PlanStep, state: dict, config: RunnableConfig) -> C
         return response
     except GraphRecursionError as e:
         return CapabilityFailure(message=str(e), reason=str(e), details={})
-    

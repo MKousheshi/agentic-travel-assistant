@@ -7,6 +7,7 @@ from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
+from langsmith import traceable
 
 from app.models import PlanStep, CapabilityResult, CapabilityFailure
 from app.prompts.capability import CAPABILITY_PROMPT
@@ -26,7 +27,8 @@ from app.registry import register_capability
         "- Analyze fare_conditions and amount\n"
     ),
 )
-def flight_capability(
+@traceable
+def ticket_capability(
     step: PlanStep, state: dict, config: RunnableConfig
 ) -> CapabilityResult:
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
