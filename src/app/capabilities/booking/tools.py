@@ -4,10 +4,10 @@ from decimal import Decimal
 from typing import Optional
 
 from langchain_core.tools import tool
+from langgraph.graph.state import RunnableConfig
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session
-from app.db.engine import engine
 from app.capabilities.booking import services
 from app.models import Confirmation
 
@@ -26,24 +26,28 @@ class GetBookingInput(BaseModel):
 
 
 @tool(args_schema=GetBookingInput)
-def get_booking_by_ref(book_ref: str) -> dict:
+def get_booking_by_ref(book_ref: str, config: RunnableConfig) -> dict:
     """Retrieve complete booking information using its booking reference."""
 
-    with Session(engine) as session:
-        booking = services.get_booking_by_ref(session, book_ref)
+    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    if not session:
+        raise ValueError(
+            "Session is required in RunnableConfig for get_booking_by_ref."
+        )
+    booking = services.get_booking_by_ref(session, book_ref)
 
-        if booking is None:
-            return {
-                "found": False,
-                "booking": None,
-                "message": f"No booking was found for reference '{book_ref}'.",
-            }
-
+    if booking is None:
         return {
-            "found": True,
-            "booking": booking.model_dump(),
-            "message": "Booking retrieved successfully.",
+            "found": False,
+            "booking": None,
+            "message": f"No booking was found for reference '{book_ref}'.",
         }
+
+    return {
+        "found": True,
+        "booking": booking.model_dump(),
+        "message": "Booking retrieved successfully.",
+    }
 
 
 # ─────────────────────────────────────────────
@@ -100,6 +104,7 @@ def format_validation_error(error: Exception) -> str:
 
 @tool(args_schema=SearchBookingsInput)
 def search_bookings(
+    config: RunnableConfig,
     date_book: Optional[date] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -112,26 +117,27 @@ def search_bookings(
     - date_book: an exact booking date
     - date_from and date_to: an inclusive date range
     """
-    with Session(engine) as session:
-        if date_book is not None:
-            bookings = services.search_bookings_for_date(
-                session,
-                booking_date=date_book,
-                limit=limit,
-            )
-        else:
-            bookings = services.search_bookings_by_date_range(
-                session,
-                start_date=(
-                    datetime.combine(date_from, datetime.min.time())
-                    if date_from
-                    else None
-                ),
-                end_date=(
-                    datetime.combine(date_to, datetime.min.time()) if date_to else None
-                ),
-                limit=limit,
-            )
+    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    if not session:
+        raise ValueError("Session is required in RunnableConfig for search_bookings.")
+
+    if date_book is not None:
+        bookings = services.search_bookings_for_date(
+            session,
+            booking_date=date_book,
+            limit=limit,
+        )
+    else:
+        bookings = services.search_bookings_by_date_range(
+            session,
+            start_date=(
+                datetime.combine(date_from, datetime.min.time()) if date_from else None
+            ),
+            end_date=(
+                datetime.combine(date_to, datetime.min.time()) if date_to else None
+            ),
+            limit=limit,
+        )
 
     return {
         "count": len(bookings),
@@ -163,22 +169,28 @@ class BookingAnalyticsInput(BaseModel):
 
 @tool(args_schema=BookingAnalyticsInput)
 def calculate_booking_analytics(
+    config: RunnableConfig,
     date_from: date,
     date_to: date,
 ) -> dict:
     """
     Calculate revenue (total_amount sum) and booking count for a date range.
     """
-    with Session(engine) as session:
-        summary = services.calculate_booking_revenue(
-            session,
-            start_date=datetime.combine(date_from, datetime.min.time()),
-            end_date=datetime.combine(date_to, datetime.min.time()),
+    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    if not session:
+        raise ValueError(
+            "Session is required in RunnableConfig for calculate_booking_analytics."
         )
-        return {
-            "count": summary.booking_count,
-            "revenue": summary.total_revenue,
-        }
+
+    summary = services.calculate_booking_revenue(
+        session,
+        start_date=datetime.combine(date_from, datetime.min.time()),
+        end_date=datetime.combine(date_to, datetime.min.time()),
+    )
+    return {
+        "count": summary.booking_count,
+        "revenue": summary.total_revenue,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -208,6 +220,7 @@ class CreateBookingInput(BaseModel):
 
 @tool(args_schema=CreateBookingInput)
 def create_booking(
+    config: RunnableConfig,
     book_ref: str,
     total_amount: Decimal,
     book_date: date,
@@ -215,23 +228,26 @@ def create_booking(
     """
     Create a new booking with a unique book_ref, total_amount, and book_date.
     """
-    with Session(engine) as session:
-        try:
-            booking = services.create_booking(
-                session,
-                book_ref=book_ref,
-                book_date=datetime.combine(book_date, datetime.min.time()),
-                total_amount=total_amount,
-            )
-            return {
-                "message": "Booking created successfully",
-                "booking": booking.model_dump(),
-            }
-        except Exception as e:
-            return {
-                "message": f"Failed to create booking: {str(e)}",
-                "booking": None,
-            }
+    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    if not session:
+        raise ValueError("Session is required in RunnableConfig for create_booking.")
+
+    try:
+        booking = services.create_booking(
+            session,
+            book_ref=book_ref,
+            book_date=datetime.combine(book_date, datetime.min.time()),
+            total_amount=total_amount,
+        )
+        return {
+            "message": "Booking created successfully",
+            "booking": booking.model_dump(),
+        }
+    except Exception as e:
+        return {
+            "message": f"Failed to create booking: {str(e)}",
+            "booking": None,
+        }
 
 
 # ─────────────────────────────────────────────
@@ -248,42 +264,44 @@ class DeleteBookingInput(BaseModel):
 
 
 @tool(args_schema=DeleteBookingInput)
-def delete_booking_with_dependency_check(book_ref: str) -> dict:
+def delete_booking_with_dependency_check(config: RunnableConfig, book_ref: str) -> dict:
     """
     Delete a booking only after checking all related/dependent records.
     """
-    with Session(engine) as session:
+    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    if not session:
+        raise ValueError(
+            "Session is required in RunnableConfig for delete_booking_with_dependency_check."
+        )
+
+    try:
+        effect = services.preview_booking_deletion(session, book_ref=book_ref)
+    except Exception as e:
+        return {
+            "deleted": False,
+            "message": f"Failed to delete booking. {str(e)}",
+        }
+    confirmation = Confirmation(
+        message="Proceed to delete booking?", data=asdict(effect)
+    )
+    result = interrupt(confirmation)
+    confirmation = Confirmation.model_validate(result)
+    if confirmation.confirmed:
         try:
-            effect = services.preview_booking_deletion(session, book_ref=book_ref)
+            services.delete_booking_by_ref(session, book_ref=book_ref)
+            return {
+                "deleted": True,
+                "message": "Booking deleted successfully",
+            }
         except Exception as e:
-            session.rollback()
             return {
                 "deleted": False,
                 "message": f"Failed to delete booking. {str(e)}",
             }
-        confirmation = Confirmation(
-            message="Proceed to delete booking?", data=asdict(effect)
-        )
-        result = interrupt(confirmation)
-        confirmation = Confirmation.model_validate(result)
-        if confirmation.confirmed:
-            try:
-                services.delete_booking_by_ref(session, book_ref=book_ref)
-                session.commit()                
-                return {
-                    "deleted": True,
-                    "message": "Booking deleted successfully",
-                }
-            except Exception as e:
-                session.rollback()
-                return {
-                    "deleted": False,
-                    "message": f"Failed to delete booking. {str(e)}",
-                }
-        return {
-            "deleted": False,
-            "message": f"User aborted deletion.",
-        }
+    return {
+        "deleted": False,
+        "message": f"User aborted deletion.",
+    }
 
 
 booking_tools = [

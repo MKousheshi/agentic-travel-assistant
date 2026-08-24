@@ -4,8 +4,10 @@ from langgraph.types import Command
 from langchain.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 import chainlit as cl
+from sqlmodel import Session
 from app.graph.build_graph import build_graph
 from app.models import Confirmation
+from app.db.engine import engine
 
 
 def format_node_output(node_output: dict) -> str:
@@ -32,7 +34,8 @@ async def on_chat_start():
     thread_id = str(uuid.uuid4())
 
     graph = build_graph(MemorySaver())
-    config = {"configurable": {"thread_id": thread_id}}
+    session = Session(engine)
+    config = {"configurable": {"thread_id": thread_id, "session": session}}
 
     cl.user_session.set("config", config)
     cl.user_session.set("graph", graph)

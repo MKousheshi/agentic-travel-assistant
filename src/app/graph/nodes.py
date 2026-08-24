@@ -4,7 +4,9 @@ from langchain.agents.middleware.types import InputAgentState
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
-from app.graph.state import OverallState, ExecutionState
+from sqlalchemy.orm import SessionTransaction
+from sqlmodel import Session
+from app.graph.state import WorkflowState, ExecutionState
 from app.models import (
     PlannerResponse,
     PlanResponse,
@@ -15,10 +17,11 @@ from app.models import (
 from app.agents import planner_agent, eval_agent
 from app.config import get_settings
 from app._capabilities import registry
+from app.db.engine import engine
 
 
 @traceable
-def create_plan(state: OverallState) -> dict:
+def create_plan(state: WorkflowState) -> dict:
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
@@ -33,7 +36,7 @@ def create_plan(state: OverallState) -> dict:
     response: PlannerResponse = result["structured_response"]
     match response:
         case PlanResponse(kind="plan", response=plan):
-            return {"plan": plan, "execution": ExecutionState()}
+            return {"plan": plan}
 
         case ClarificationResponse(kind="clarification", response=clarification):
             return {
@@ -43,7 +46,7 @@ def create_plan(state: OverallState) -> dict:
 
 
 @traceable
-def route_after_plan(state: OverallState) -> str:
+def route_after_plan(state: WorkflowState) -> str:
     plan = state.get("plan", None)
     if not plan:
         return "exit"
@@ -51,12 +54,14 @@ def route_after_plan(state: OverallState) -> str:
 
 
 @traceable
-def validate_plan_by_rules(state: OverallState) -> dict:
+def validate_plan_by_rules(state: WorkflowState) -> dict:
     plan = state.get("plan", None)
     retries = state.get("retries", 0)
     if not plan:
         return {}
     errors = []
+    if not plan.steps:
+        errors.append("plan is empty, no steps found.")
     for step in plan.steps:
         if registry.has(step.capability_id):
             continue
@@ -72,7 +77,7 @@ def validate_plan_by_rules(state: OverallState) -> dict:
 
 
 @traceable
-def route_after_validation(state: OverallState) -> str:
+def route_after_validation(state: WorkflowState) -> str:
     feedback = state.get("feedback", None)
     retries = state.get("retries", 0)
     if not feedback:
@@ -85,7 +90,7 @@ def route_after_validation(state: OverallState) -> str:
 
 
 @traceable
-def validate_plan_by_llm(state: OverallState) -> dict:
+def validate_plan_by_llm(state: WorkflowState) -> dict:
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     plan = state.get("plan", None)
     retries = state.get("retries", 0)
@@ -114,32 +119,49 @@ def validate_plan_by_llm(state: OverallState) -> dict:
 
 
 @traceable
-def execution_router(state: OverallState) -> str:
-    exec_state = state.get("execution", None)
+def execution_init(state: WorkflowState, config: RunnableConfig) -> dict:
+    session = config.get("configurable", {}).get("session", None)
+    if session:
+        session.begin()
+    exec_state = ExecutionState()
+    return {"execution": exec_state}
+
+
+@traceable
+def execution_router(state: WorkflowState, config: RunnableConfig) -> str:
+    execution = state.get("execution", None)
+    session = config.get("configurable", {}).get("session", None)
+
     plan = state.get("plan", None)
-    if not plan or not exec_state:
+    if not plan or not execution:
         return "exit"
-    if exec_state.status == "running":
+    if execution.status == "running":
         return "execution"
+    if execution.status == "completed":
+        if session:
+            session.commit()
+    if execution.status == "failed":
+        if session:
+            session.rollback()
     return "synth"
 
 
 @traceable
-def execute_plan(state: OverallState, config: RunnableConfig) -> dict:
-    exec_state = state.get("execution", None)
+def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
+    execution = state.get("execution", None)
     plan = state.get("plan", None)
-    if not plan or not exec_state:
+    if not plan or not execution:
         return {}
 
-    step = plan.steps[exec_state.current_step_index]
+    step = plan.steps[execution.current_step_index]
     capability = registry.get(step.capability_id)
     if not capability:
         raise ReferenceError(f"Capability {step.capability_id} not found")
     context = CapabilityContext(
-        messages=state["messages"], prior_results=exec_state.results
+        messages=state["messages"], prior_results=execution.results
     )
     result = capability.execute(step, context, config=config)
-    next_exec_state = exec_state.model_copy()
+    next_exec_state = execution.model_copy()
     match (result.status):
         case "success":
             next_exec_state.results.append(result.data)
@@ -156,7 +178,7 @@ def execute_plan(state: OverallState, config: RunnableConfig) -> dict:
 
 
 @traceable
-def synthesize(state: OverallState) -> dict:
+def synthesize(state: WorkflowState) -> dict:
     execution = state.get("execution")
     if not execution:
         return {}
@@ -166,7 +188,7 @@ def synthesize(state: OverallState) -> dict:
             return {"user_message": execution.results}
         case "failed":
             # todo
-            return {}
+            return {"user_message": execution.results}
         case "waiting_for_user":
             return {"user_message": execution.pending_question}
         case _:
@@ -174,5 +196,5 @@ def synthesize(state: OverallState) -> dict:
 
 
 @traceable
-def exit(state: OverallState):
+def exit(state: WorkflowState):
     return {}

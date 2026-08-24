@@ -1,7 +1,9 @@
 from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from sqlmodel import Session
+from sqlalchemy.orm import SessionTransaction
 from app.models import ExecutionPlan, Feedback
 
 
@@ -17,7 +19,8 @@ class ExecutionState(BaseModel):
     pending_question: str | None = None
 
 
-class OverallState(TypedDict, total=False):
+
+class WorkflowState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
     plan: ExecutionPlan
     feedback: Feedback

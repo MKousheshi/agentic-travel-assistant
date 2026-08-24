@@ -162,12 +162,8 @@ def create_booking(
     )
 
     try:
-        # A nested transaction uses a SAVEPOINT. If the flush fails, only the
-        # savepoint is rolled back and the caller's outer transaction remains
-        # usable.
-        with session.begin_nested():
-            session.add(booking)
-            session.flush()
+        session.add(booking)
+        session.flush()
 
     except IntegrityError as exc:
         raise BookingAlreadyExistsError(
@@ -181,10 +177,15 @@ class BookingNotFoundError(LookupError):
     """Raised when no booking exists for the requested book_ref."""
 
 
-def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
+def delete_booking_by_ref(session: Session, *, book_ref: str) -> int:
     """
-    Delete one booking by its reference and cascade-delete all related
-    tickets, ticket_flights, and boarding_passes.
+    Delete all bookings matching the given reference and cascade-delete
+    all related tickets, ticket_flights, and boarding_passes.
+
+    Works safely even if non-unique duplicate book_ref records exist in the database.
+
+    Returns:
+        int: The number of booking records deleted.
 
     Raises:
         ValueError: If `book_ref` is not a 6-character string.
@@ -195,39 +196,41 @@ def delete_booking_by_ref(session: Session, *, book_ref: str) -> None:
     if not isinstance(book_ref, str) or len(book_ref) != 6:
         raise ValueError("book_ref must be exactly 6 characters long")
 
-    # 1. Verify the booking exists
-    booking = session.exec(
-        select(Booking).where(Booking.book_ref == book_ref)
-    ).one_or_none()
+    # 1. Check how many bookings match (safe against duplicates, unlike one_or_none())
+    matching_count = session.exec(
+        select(func.count()).select_from(Booking).where(Booking.book_ref == book_ref)
+    ).one()
 
-    if booking is None:
+    if matching_count == 0:
         raise BookingNotFoundError(f"No booking found for book_ref={book_ref!r}")
 
-    # Subquery identifying all ticket numbers belonging to this booking
+    # Subquery identifying all ticket numbers belonging to this booking reference
     ticket_subquery = select(Ticket.ticket_no).where(Ticket.book_ref == book_ref)
 
     try:
         with session.begin_nested():
-            # 2. Delete boarding passes associated with this booking's tickets
+            # 2. Delete boarding passes associated with matching tickets
             session.exec(
                 delete(BoardingPass).where(BoardingPass.ticket_no.in_(ticket_subquery))
             )
 
-            # 3. Delete ticket flights associated with this booking's tickets
+            # 3. Delete ticket flights associated with matching tickets
             session.exec(
                 delete(TicketFlight).where(TicketFlight.ticket_no.in_(ticket_subquery))
             )
 
-            # 4. Delete the tickets themselves
+            # 4. Delete tickets associated with this book_ref
             session.exec(delete(Ticket).where(Ticket.book_ref == book_ref))
 
-            # 5. Delete the booking record
-            session.delete(booking)
+            # 5. Delete all matching bookings in bulk
+            session.exec(delete(Booking).where(Booking.book_ref == book_ref))
 
             session.flush()
 
     except IntegrityError:
         raise
+
+    return matching_count
 
 
 @dataclass(frozen=True)
