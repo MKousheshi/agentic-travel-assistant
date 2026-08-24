@@ -7,7 +7,7 @@ from sqlalchemy import Column, JSON, Numeric, CheckConstraint
 
 
 class Aircraft(SQLModel, table=True):
-    __tablename__ = "aircrafts_data"
+    __tablename__ = "aircrafts_data" # type: ignore
     __table_args__ = (CheckConstraint("range > 0", name="aircrafts_range_check"),)
 
     aircraft_code: str = Field(primary_key=True, max_length=3)
@@ -19,7 +19,7 @@ class Aircraft(SQLModel, table=True):
 
 
 class Airport(SQLModel, table=True):
-    __tablename__ = "airports_data"
+    __tablename__ = "airports_data" # type: ignore
 
     airport_code: str = Field(primary_key=True, max_length=3)
     airport_name: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
@@ -38,7 +38,7 @@ class Airport(SQLModel, table=True):
 
 
 class Booking(SQLModel, table=True):
-    __tablename__ = "bookings"
+    __tablename__ = "bookings" # type: ignore
 
     book_ref: str = Field(primary_key=True, max_length=6)
     book_date: datetime = Field(nullable=False)
@@ -48,7 +48,7 @@ class Booking(SQLModel, table=True):
 
 
 class Ticket(SQLModel, table=True):
-    __tablename__ = "tickets"
+    __tablename__ = "tickets" # type: ignore
 
     ticket_no: str = Field(primary_key=True, max_length=13)
     book_ref: str = Field(foreign_key="bookings.book_ref", max_length=6, nullable=False)
@@ -60,7 +60,7 @@ class Ticket(SQLModel, table=True):
 
 
 class Flight(SQLModel, table=True):
-    __tablename__ = "flights"
+    __tablename__ = "flights" # type: ignore
 
     flight_id: int = Field(primary_key=True)
 
@@ -98,7 +98,7 @@ class Flight(SQLModel, table=True):
 
 
 class Seat(SQLModel, table=True):
-    __tablename__ = "seats"
+    __tablename__ = "seats" # type: ignore
 
     aircraft_code: str = Field(
         foreign_key="aircrafts_data.aircraft_code",
@@ -112,7 +112,7 @@ class Seat(SQLModel, table=True):
 
 
 class TicketFlight(SQLModel, table=True):
-    __tablename__ = "ticket_flights"
+    __tablename__ = "ticket_flights" # type: ignore
 
     ticket_no: str = Field(
         foreign_key="tickets.ticket_no",
@@ -128,7 +128,7 @@ class TicketFlight(SQLModel, table=True):
 
 
 class BoardingPass(SQLModel, table=True):
-    __tablename__ = "boarding_passes"
+    __tablename__ = "boarding_passes" # type: ignore
 
     ticket_no: str = Field(
         foreign_key="tickets.ticket_no",

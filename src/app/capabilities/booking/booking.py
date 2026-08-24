@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
 
 from app.models import PlanStep, CapabilityResult, CapabilityFailure
-from app.prompts.prompts import CAPABILITY_PROMPT
+from app.prompts.capability import CAPABILITY_PROMPT
 from app.capabilities.booking.tools import booking_tools
 from app.chat_models import mini_model
 from app.registry import register_capability

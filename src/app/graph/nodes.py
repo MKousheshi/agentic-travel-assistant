@@ -18,6 +18,14 @@ from app.registry import registry
 
 
 @traceable
+def route_from_start(state: WorkflowState) -> str:
+    execution = state.get("execution")
+    if execution:
+        return "execution"
+    return "planning"
+
+
+@traceable
 def create_plan(state: WorkflowState) -> dict:
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
@@ -168,6 +176,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
             if next_exec_state.current_step_index == len(plan.steps):
                 next_exec_state.status = "completed"
         case "failure":
+            next_exec_state.pending_question = result.message
             next_exec_state.status = "failed"
         case "needs_information":
             next_exec_state.status = "waiting_for_user"
@@ -187,7 +196,7 @@ def synthesize(state: WorkflowState) -> dict:
             return {"user_message": execution.results}
         case "failed":
             # todo
-            return {"user_message": execution.results}
+            return {"user_message": execution.pending_question}
         case "waiting_for_user":
             return {"user_message": execution.pending_question}
         case _:
@@ -195,5 +204,15 @@ def synthesize(state: WorkflowState) -> dict:
 
 
 @traceable
-def exit(state: WorkflowState):
+def exit(state: WorkflowState) -> dict:
+    execution = state.get("execution")
+    if execution:
+        match execution.status:
+            case "completed":
+                return {"execution": None}
+            case "failed":
+                return {"execution": None}
+            case "waiting_for_user":
+                return {}
+
     return {}
