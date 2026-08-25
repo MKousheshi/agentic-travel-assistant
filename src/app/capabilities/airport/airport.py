@@ -13,7 +13,7 @@ from langsmith import traceable
 from app.models import PlanStep, CapabilityResult, CapabilityFailure
 from app.prompts.capability import CAPABILITY_PROMPT
 from app.capabilities.airport.tools import airport_tools
-from app.chat_models import mini_model
+from app.chat_models import capability_model
 from app.registry import register_capability
 
 
@@ -33,7 +33,7 @@ def airport_capability(
     messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
     config = config | {"recursion_limit": 10}
     agent = create_agent(
-        model=mini_model,
+        model=capability_model,
         tools=airport_tools,
         system_prompt=CAPABILITY_PROMPT.format(
             current_date=date.today().isoformat(),

@@ -262,45 +262,90 @@ class DeleteBookingInput(BaseModel):
         description="Reference of the booking to delete.",
     )
 
-
 @tool(args_schema=DeleteBookingInput)
-def delete_booking_with_dependency_check(config: RunnableConfig, book_ref: str) -> dict:
+def delete_booking_with_dependency_check(
+    config: RunnableConfig,
+    book_ref: str,
+) -> dict:
     """
-    Delete a booking only after checking all related/dependent records.
-    """
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
-    if not session:
-        raise ValueError(
-            "Session is required in RunnableConfig for delete_booking_with_dependency_check."
-        )
+    Delete a booking after checking related and dependent records.
 
+    The returned result always contains:
+    - success
+    - retryable
+    - error_code
+    - message
+    """
+
+    session: Optional[Session] = (
+        config.get("configurable", {}).get("session")
+    )
+
+    if session is None:
+        return {
+            "success": False,
+            "retryable": False,
+            "error_code": "MISSING_DATABASE_SESSION",
+            "message": (
+                "A database session is required to delete the booking."
+            ),
+        }
+
+    # This operation is read-only and is safe to repeat after interrupt
+    # resumption.
     try:
-        effect = services.preview_booking_deletion(session, book_ref=book_ref)
+        effect = services.preview_booking_deletion(
+            session,
+            book_ref=book_ref,
+        )
     except Exception as e:
         return {
-            "deleted": False,
-            "message": f"Failed to delete booking. {str(e)}",
+            "success": False,
+            "retryable": False,
+            "error_code": "BOOKING_PREVIEW_FAILED",
+            "message": (
+                f"Could not check whether booking '{book_ref}' "
+                f"can be deleted: {e}"
+            ),
         }
+
+    if not effect.booking_exists:
+        return {
+            # The requested end state is already satisfied.
+            "success": True,
+            "retryable": False,
+            "error_code": "BOOKING_NOT_FOUND",
+            "message": (
+                f"Booking '{book_ref}' was not found. "
+                "No deletion was necessary."
+            ),
+        }
+
+    # Do not catch interrupt(). LangGraph needs the interrupt to propagate.
     confirmation = Confirmation(
         message="Proceed to delete booking?", data=asdict(effect)
     )
     result = interrupt(confirmation)
     confirmation = Confirmation.model_validate(result)
-    if confirmation.confirmed:
-        try:
-            services.delete_booking_by_ref(session, book_ref=book_ref)
-            return {
-                "deleted": True,
-                "message": "Booking deleted successfully",
-            }
-        except Exception as e:
-            return {
-                "deleted": False,
-                "message": f"Failed to delete booking. {str(e)}",
-            }
+
+    if not confirmation.confirmed:
+        return {
+            "success": False,
+            "retryable": False,
+            "error_code": "USER_ABORTED",
+            "message": "The user cancelled the booking deletion.",
+        }
+
+
+    services.delete_booking_by_ref(
+        session,
+        book_ref=book_ref,
+    )
+
+
     return {
-        "deleted": False,
-        "message": f"User aborted deletion.",
+        "success": True,
+        "message": "Booking deleted successfully.",
     }
 
 

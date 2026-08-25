@@ -31,6 +31,9 @@ def create_plan(state: WorkflowState) -> dict:
     messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
+    retries = state.get("retries", 0)
+    if retries >= get_settings().max_planning_retries:
+        retries = 0
     if previous_plan:
         messages.append(
             AIMessage(content=f"Previous plan: {previous_plan.model_dump_json()}")
@@ -42,13 +45,14 @@ def create_plan(state: WorkflowState) -> dict:
     response: PlannerResponse = result["structured_response"]
     match response:
         case PlanResponse(kind="plan", response=plan):
-            return {"plan": plan}
+            return {"plan": plan, "retries": retries}
 
         case ClarificationResponse(kind="clarification", response=clarification):
             return {
                 "user_message": clarification.user_message,
                 "messages": [AIMessage(content=clarification.user_message)],
                 "plan": None,
+                "retries": retries,
             }
 
 
@@ -150,7 +154,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     plan = state.get("plan", None)
     if not plan or not execution:
         return {}
-
+    print('execution', execution.current_step_index)
     step = plan.steps[execution.current_step_index]
     capability = registry.get(step.capability_id)
     if not capability:
@@ -204,12 +208,20 @@ def synthesize(state: WorkflowState) -> dict:
                     )
                 ]
             )
-            return {"user_message": response.content}
+            return {
+                "user_message": response.content,
+                "messages": [AIMessage(response.content)],
+            }
         case "failed":
-            # todo
-            return {"user_message": execution.pending_question}
+            return {
+                "user_message": execution.pending_question,
+                "messages": [AIMessage(execution.pending_question)],
+            }
         case "waiting_for_user":
-            return {"user_message": execution.pending_question}
+            return {
+                "user_message": execution.pending_question,
+                "messages": [AIMessage(execution.pending_question)],
+            }
         case _:
             return {}
 

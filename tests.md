@@ -32,15 +32,9 @@
 ```text
 جستجوی صحیح بدون انتقال داده غیرضروری
 ```
-|ticket_no|flight_id|fare_conditions|amount|
-|---------|---------|---------------|------|
-|0005435839925|5997|Economy|66400|
-|0005435839925|18070|Economy|66400|
-
-|flight_id|flight_no|scheduled_departure|scheduled_arrival|departure_airport|arrival_airport|status|aircraft_code|actual_departure|actual_arrival|
-|---------|---------|-------------------|-----------------|-----------------|---------------|------|-------------|----------------|--------------|
-|5997|PG0703|2017-08-18 17:15:00+03|2017-08-19 02:00:00+03|SVO|UUS|Scheduled|319|\N|\N|
-|18070|PG0704|2017-08-28 10:45:00+03|2017-08-28 19:30:00+03|UUS|SVO|Scheduled|319|\N|\N|
+|ticket_no|book_ref|passenger_id|
+|---------|--------|------------|
+|0005435839925|7E0A87|0000 076149|
 
 
 **Status:** passed
@@ -305,6 +299,9 @@ partial success و گزارش failure واضح
 **Logs:**
 
 ---
+
+## Booking
+
 
 
 ## Flight

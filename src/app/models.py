@@ -36,8 +36,7 @@ class PlanStepDraft(BaseModel):
 
 
 class PlanStep(PlanStepDraft):
-    step_id: UUID = Field(
-        default_factory=uuid4,
+    step_id: int = Field(
         description="Unique identifier generated for this plan step.",
     )
 
