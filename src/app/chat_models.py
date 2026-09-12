@@ -16,4 +16,4 @@ model = ChatOpenAI(
 
 
 plan_model = mini_model
-capability_model = model
+capability_model = mini_model

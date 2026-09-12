@@ -1,8 +1,29 @@
-# Project Title
+# Agentic Travel Assistant
 
-**AmnAfzar AI Interview Task**
+An agentic workflow system for an airline/travel domain that handles natural-language user queries by planning the required actions, executing them through available system capabilities, and synthesizing a unified final response.
 
-An agentic workflow system designed to handle user queries by planning the required actions, executing them through available system capabilities, and synthesizing a unified final response.
+The system turns ambiguous, multi-step requests (for example, *"find flight PG0405, where does it land, and what is the weather there?"*) into a validated, transactionally-safe sequence of domain actions run against an airline database, with human-in-the-loop confirmation for risky operations.
+
+## Technology Stack
+
+- **Language:** Python 3.12 (pinned via `.python-version`)
+- **Orchestration:** LangGraph (`StateGraph`, `MemorySaver` checkpointer, `interrupt` / `Command` for human-in-the-loop)
+- **Agents & LLM:** LangChain (`create_agent`, `ToolStrategy` structured output), `langchain-openai` (OpenAI `gpt-4o` / `gpt-4o-mini`)
+- **Validation & Config:** Pydantic v2 (structured outputs and plan validation), `pydantic-settings` (`SecretStr` secret handling)
+- **Data & Persistence:** SQLModel / SQLAlchemy 2.0 over SQLite (8 relational tables)
+- **UI:** Chainlit chat application
+- **Observability:** LangSmith tracing (`@traceable` on every graph node)
+- **Tooling:** `uv` for dependency and environment management, LangGraph CLI (`langgraph.json`)
+
+## Project Metrics
+
+| Metric                            | Value                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Graph nodes / conditional routers | 7 nodes, 4 routers                                                                                                                    |
+| Capabilities (sub-agents)         | 5 implemented (`flight`, `booking`, `ticket`, `airport`, `weather`); 4 registered by default                                |
+| Domain tools                      | 25 LangChain tools, each with a dedicated Pydantic`args_schema`                                                                     |
+| Database tables                   | 8 (`aircrafts_data`, `airports_data`, `bookings`, `tickets`, `flights`, `seats`, `ticket_flights`, `boarding_passes`) |
+| Planning retries                  | up to 3 before graceful exit                                                                                                          |
 
 ## Brief Architecture Description
 
@@ -47,9 +68,7 @@ app/
 
 ## Architecture Diagram
 
-
 ![Architecture Diagram](/workflow.png)
-
 
 ## Agent / Tool / Service Boundaries
 
@@ -70,21 +89,24 @@ The LangGraph workflow is responsible for:
 
 ### Capability Layer
 
-Implemented capabilities currently include:
+Implemented capabilities include:
 
 - **Booking**
 - **Ticket**
 - **Flight**
 - **Airport**
+- **Weather** — fully implemented against an OpenWeather client, but currently disabled (not registered) by default.
 
 Each capability is an independent package containing its own:
 
 - Service layer
-- Tools
+- Tools (25 LangChain tools total across all capabilities, each with a Pydantic `args_schema`)
 - Utilities
 - Domain-specific logic
 
-A plan step identifies its target capability through a `capability_id`. The workflow routes the step to a decorator-registered capability function, which performs the required action.
+Each capability is itself a bounded sub-agent: a plan step identifies its target capability through a `capability_id`, and the workflow routes the step to a decorator-registered capability function. That function spins up a ReAct-style agent over the capability's tools, bounded by a recursion limit so a runaway sub-agent degrades into a structured failure rather than hanging the workflow. This yields a hierarchical design — a top-level planner/validator orchestrator delegating to per-domain sub-agents.
+
+Capabilities are discovered and registered automatically through a custom decorator-based `CapabilityRegistry`, which walks the `app.capabilities` package, validates each handler's signature and return type at registration time, and generates the capability catalog injected into the planner and validator prompts. New capabilities can therefore be added without changing the graph.
 
 Capabilities may use the shared database session provided through `RunnableConfig`. They do not independently control transaction commit or rollback; transaction lifecycle ownership remains at the workflow layer.
 
@@ -163,6 +185,8 @@ The system includes several safety and consistency measures:
 - **Semantic plan evaluation:** An LLM evaluator checks that the plan is appropriate for the user goal and respects dependencies.
 - **Controlled capability routing:** Steps can only be routed to registered capability functions.
 - **ORM-based database access:** SQLModel ORM is used instead of constructing raw SQL queries, helping reduce SQL injection risk.
+- **Defensive data coercion:** A custom `SafeDateTime` SQLAlchemy type decorator safely reads malformed SQLite datetime values (for example `\N`, empty strings, or `NULL`) without crashing on the provided dataset.
+- **Bounded sub-agents:** Capability sub-agents run under a recursion limit, and a `GraphRecursionError` is converted into a structured `CapabilityFailure` rather than propagating as an unhandled error.
 - **Human confirmation for risky operations:** Before executing operations that require user approval, the workflow sends an interrupt containing the effect of the operation and waits for the user’s decision.
 
 ## Database Transaction Strategy
