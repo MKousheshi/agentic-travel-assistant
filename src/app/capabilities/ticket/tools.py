@@ -1,11 +1,11 @@
-from dataclasses import asdict
 from decimal import Decimal
-from typing import Optional
+
 from langchain_core.tools import tool
 from langgraph.graph.state import RunnableConfig
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 from sqlmodel import Session
+
 from app.capabilities.ticket import services
 from app.models import Confirmation
 
@@ -23,7 +23,7 @@ class GetTicketInput(BaseModel):
 def get_ticket_by_number(ticket_no: str, config: RunnableConfig) -> dict:
     """Retrieve full details for a single ticket by its ticket number, including relations."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for get_ticket_by_number."
@@ -74,7 +74,7 @@ def get_tickets_by_passenger_id(
 ) -> dict:
     """Search and retrieve tickets by passenger ID with pagination."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for get_tickets_by_passenger_id."
@@ -128,7 +128,7 @@ def get_flights_by_ticket_no(
 ) -> dict:
     """Find flights associated with a ticket through ticket_flights."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for get_flights_by_ticket_no."
@@ -146,7 +146,7 @@ def get_flights_by_ticket_no(
         "count": len(flights),
         "flights": [flight.model_dump() for flight in flights],
         "message": (
-            f"Found {len(flights)} flight(s) associated with ticket " f"'{ticket_no}'."
+            f"Found {len(flights)} flight(s) associated with ticket '{ticket_no}'."
             if flights
             else f"No flights were found for ticket '{ticket_no}'."
         ),
@@ -183,7 +183,7 @@ def create_ticket(
 ) -> dict:
     """Create a new ticket under an existing booking reference."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError("Session is required in RunnableConfig for create_ticket.")
 
@@ -223,7 +223,7 @@ def delete_ticket_with_dependency_check(
 ) -> dict:
     """Check dependencies and delete a ticket if no blocking boarding passes exist."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError("Session is required in RunnableConfig for delete_ticket.")
 
@@ -273,7 +273,7 @@ def delete_ticket_with_dependency_check(
     return {
         "success": True,
         "deleted": False,
-        "message": f"User aborted deletion.",
+        "message": "User aborted deletion.",
     }
 
 
@@ -305,7 +305,7 @@ def analyze_ticket_fares(
 ) -> dict:
     """Analyze fare conditions and amounts across a ticket."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for analyze_ticket_fares."

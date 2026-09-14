@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -30,7 +30,7 @@ def _flight_load_options() -> tuple:
     )
 
 
-def _localized(value: Any, lang: str = "en") -> Optional[str]:
+def _localized(value: Any, lang: str = "en") -> str | None:
     """Extract a readable string from a JSON column (dict or JSON text)."""
     if value is None:
         return None
@@ -65,7 +65,7 @@ def _escape_like(pattern: str) -> str:
     return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _parse_coordinates(value: Optional[str]) -> dict[str, Optional[float]]:
+def _parse_coordinates(value: str | None) -> dict[str, float | None]:
     """Parse the SQLite-safe coordinates string into lat/lon floats.
 
     Handles 'lat, lon', 'lat lon', 'lat; lon', JSON lists, and
@@ -132,7 +132,7 @@ def _ensure_airport_exists(session: Session, airport_code: str) -> None:
 def get_airport_by_code(
     session: Session,
     airport_code: str,
-) -> Optional[Airport]:
+) -> Airport | None:
     """Retrieve a single airport by its primary key."""
     return session.get(Airport, airport_code)
 

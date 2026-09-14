@@ -1,18 +1,19 @@
-from langgraph.graph import START, StateGraph, END
-from app.graph.state import WorkflowState
+from langgraph.graph import END, START, StateGraph
+
 from app.graph.nodes import (
     create_plan,
-    validate_plan_by_rules,
-    validate_plan_by_llm,
     execute_plan,
-    synthesize,
-    exit,
+    execution_init,
     execution_router,
+    exit,
     route_after_plan,
     route_after_validation,
-    execution_init,
-    route_from_start
+    route_from_start,
+    synthesize,
+    validate_plan_by_llm,
+    validate_plan_by_rules,
 )
+from app.graph.state import WorkflowState
 
 
 def build_graph(checkpointer=None):
@@ -40,7 +41,7 @@ def build_graph(checkpointer=None):
         route_after_validation,
         {"next": "execution-init", "planning": "planning", "exit": "exit"},
     )
-    workflow.add_edge('execution-init', 'execution')
+    workflow.add_edge("execution-init", "execution")
     workflow.add_conditional_edges("execution", execution_router)
     workflow.add_edge("synth", "exit")
     workflow.add_edge("exit", END)

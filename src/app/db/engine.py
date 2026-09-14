@@ -1,7 +1,8 @@
 from contextlib import contextmanager
+
+from sqlalchemy import create_engine
+
 from ..config import get_settings
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
 
 engine = create_engine(
     f"sqlite:///{get_settings().db_path}",
@@ -15,8 +16,8 @@ engine = create_engine(
 #     cursor.execute("PRAGMA foreign_keys=ON")
 #     cursor.close()
 
+
 @contextmanager
 def get_connection():
     with engine.connect() as conn:
         yield conn
-

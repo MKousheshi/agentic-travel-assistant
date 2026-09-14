@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Optional, Tuple
 
 
-def parse_airport_coordinates(value: str) -> Optional[tuple[float, float]]:
+def parse_airport_coordinates(value: str) -> tuple[float, float] | None:
     if not value:
         return None
 

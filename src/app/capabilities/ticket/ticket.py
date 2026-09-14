@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Any, Dict
+from typing import Any
 
 from langchain.agents import create_agent
 from langchain.agents.middleware.types import InputAgentState
@@ -9,10 +9,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
 from langsmith import traceable
 
-from app.models import PlanStep, CapabilityResult, CapabilityFailure
-from app.prompts.capability import CAPABILITY_PROMPT
 from app.capabilities.ticket.tools import ticket_tools
 from app.chat_models import capability_model
+from app.models import CapabilityFailure, CapabilityResult, PlanStep
+from app.prompts.capability import CAPABILITY_PROMPT
 from app.registry import register_capability
 
 
@@ -31,7 +31,7 @@ from app.registry import register_capability
 def ticket_capability(
     step: PlanStep, state: dict, config: RunnableConfig
 ) -> CapabilityResult:
-    messages: list[AnyMessage | Dict[str, Any]] = state.get("messages", [])
+    messages: list[AnyMessage | dict[str, Any]] = state.get("messages", [])
     config = config | {"recursion_limit": 10}
     agent = create_agent(
         model=capability_model,

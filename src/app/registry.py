@@ -1,11 +1,13 @@
-from dataclasses import dataclass
 import importlib
 import inspect
 import pkgutil
-from typing import Any, Callable, Dict, Protocol, TypeVar, runtime_checkable
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from langchain_core.runnables import RunnableConfig
-from app.models import PlanStep, CapabilityResult
+
+from app.models import CapabilityResult, PlanStep
 
 
 @runtime_checkable
@@ -32,7 +34,7 @@ EXPECTED_PARAMS = ("step", "state", "config")
 
 class CapabilityRegistry:
     def __init__(self) -> None:
-        self._items: Dict[str, Capability] = {}
+        self._items: dict[str, Capability] = {}
 
     def _validate_signature(self, func: Callable[..., Any]) -> None:
         sig = inspect.signature(func)

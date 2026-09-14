@@ -1,5 +1,6 @@
 # services/weather/exceptions.py
 
+
 class WeatherServiceError(Exception):
     """Base error for weather service."""
 

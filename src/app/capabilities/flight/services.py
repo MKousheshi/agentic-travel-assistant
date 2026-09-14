@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -21,7 +21,7 @@ MAX_PAGE_SIZE = 100
 # True  -> actual time must be present
 # False -> actual time must be absent
 # None  -> no strict expectation (Delayed can be pre- or post-departure)
-STATUS_TIME_RULES: dict[str, dict[str, Optional[bool]]] = {
+STATUS_TIME_RULES: dict[str, dict[str, bool | None]] = {
     "Scheduled": {"actual_departure": False, "actual_arrival": False},
     "On Time": {"actual_departure": False, "actual_arrival": False},
     "Delayed": {"actual_departure": None, "actual_arrival": None},
@@ -51,7 +51,7 @@ def _minutes_between(scheduled: datetime, actual: datetime) -> int:
     return int((actual - scheduled).total_seconds() // 60)
 
 
-def _localized(value: Any, lang: str = "en") -> Optional[str]:
+def _localized(value: Any, lang: str = "en") -> str | None:
     """Extract a readable string from a JSON column (dict or JSON text)."""
     if value is None:
         return None
@@ -72,7 +72,7 @@ def _localized(value: Any, lang: str = "en") -> Optional[str]:
     return str(value)
 
 
-def get_flight_by_id(session: Session, flight_id: int) -> Optional[Flight]:
+def get_flight_by_id(session: Session, flight_id: int) -> Flight | None:
     """Retrieve a single flight by primary key with airports/aircraft loaded."""
     statement = (
         select(Flight)
@@ -108,8 +108,8 @@ def find_flights_between_airports(
     departure_airport: str,
     arrival_airport: str,
     *,
-    scheduled_date: Optional[date] = None,
-    status: Optional[str] = None,
+    scheduled_date: date | None = None,
+    status: str | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
     offset: int = 0,
 ) -> list[Flight]:
@@ -262,7 +262,7 @@ def analyze_actual_times_by_status(
 def get_aircraft_for_flight(
     session: Session,
     flight_id: int,
-) -> Optional[Aircraft]:
+) -> Aircraft | None:
     flight = session.get(Flight, flight_id)
 
     if flight is None:
@@ -375,5 +375,3 @@ def analyze_high_traffic_routes(
         "routes_truncated": offset + len(routes) < total_routes,
         "routes": routes,
     }
-
-

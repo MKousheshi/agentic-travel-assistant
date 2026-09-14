@@ -1,9 +1,16 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List, Any
+from typing import Any
 
-from sqlmodel import SQLModel, Field, Relationship, String
-from sqlalchemy import Column, JSON, DateTime, Dialect, Numeric, CheckConstraint, TypeDecorator
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Column,
+    Dialect,
+    Numeric,
+    TypeDecorator,
+)
+from sqlmodel import Field, Relationship, SQLModel, String
 
 
 class SafeDateTime(TypeDecorator[datetime | None]):
@@ -76,8 +83,8 @@ class Aircraft(SQLModel, table=True):
     model: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
     range: int = Field(nullable=False)
 
-    seats: List["Seat"] = Relationship(back_populates="aircraft")
-    flights: List["Flight"] = Relationship(back_populates="aircraft")
+    seats: list["Seat"] = Relationship(back_populates="aircraft")
+    flights: list["Flight"] = Relationship(back_populates="aircraft")
 
 
 class Airport(SQLModel, table=True):
@@ -89,11 +96,11 @@ class Airport(SQLModel, table=True):
     coordinates: str = Field(nullable=False)  # SQLite-safe placeholder for point
     timezone: str = Field(nullable=False)
 
-    departures: List["Flight"] = Relationship(
+    departures: list["Flight"] = Relationship(
         back_populates="departure_airport_rel",
         sa_relationship_kwargs={"foreign_keys": "[Flight.departure_airport]"},
     )
-    arrivals: List["Flight"] = Relationship(
+    arrivals: list["Flight"] = Relationship(
         back_populates="arrival_airport_rel",
         sa_relationship_kwargs={"foreign_keys": "[Flight.arrival_airport]"},
     )
@@ -106,7 +113,7 @@ class Booking(SQLModel, table=True):
     book_date: datetime = Field(nullable=False)
     total_amount: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
 
-    tickets: List["Ticket"] = Relationship(back_populates="booking")
+    tickets: list["Ticket"] = Relationship(back_populates="booking")
 
 
 class Ticket(SQLModel, table=True):
@@ -116,9 +123,9 @@ class Ticket(SQLModel, table=True):
     book_ref: str = Field(foreign_key="bookings.book_ref", max_length=6, nullable=False)
     passenger_id: str = Field(max_length=20, nullable=False)
 
-    booking: Optional[Booking] = Relationship(back_populates="tickets")
-    ticket_flights: List["TicketFlight"] = Relationship(back_populates="ticket")
-    boarding_passes: List["BoardingPass"] = Relationship(back_populates="ticket")
+    booking: Booking | None = Relationship(back_populates="tickets")
+    ticket_flights: list["TicketFlight"] = Relationship(back_populates="ticket")
+    boarding_passes: list["BoardingPass"] = Relationship(back_populates="ticket")
 
 
 class Flight(SQLModel, table=True):
@@ -142,25 +149,25 @@ class Flight(SQLModel, table=True):
         foreign_key="aircrafts_data.aircraft_code", max_length=3, nullable=False
     )
 
-    actual_departure: Optional[datetime] = Field(
+    actual_departure: datetime | None = Field(
         default=None, sa_type=SafeDateTime, nullable=True
     )
-    actual_arrival: Optional[datetime] = Field(
+    actual_arrival: datetime | None = Field(
         default=None, sa_type=SafeDateTime, nullable=True
     )
 
-    aircraft: Optional[Aircraft] = Relationship(back_populates="flights")
-    departure_airport_rel: Optional[Airport] = Relationship(
+    aircraft: Aircraft | None = Relationship(back_populates="flights")
+    departure_airport_rel: Airport | None = Relationship(
         back_populates="departures",
         sa_relationship_kwargs={"foreign_keys": "[Flight.departure_airport]"},
     )
-    arrival_airport_rel: Optional[Airport] = Relationship(
+    arrival_airport_rel: Airport | None = Relationship(
         back_populates="arrivals",
         sa_relationship_kwargs={"foreign_keys": "[Flight.arrival_airport]"},
     )
 
-    ticket_flights: List["TicketFlight"] = Relationship(back_populates="flight")
-    boarding_passes: List["BoardingPass"] = Relationship(back_populates="flight")
+    ticket_flights: list["TicketFlight"] = Relationship(back_populates="flight")
+    boarding_passes: list["BoardingPass"] = Relationship(back_populates="flight")
 
 
 class Seat(SQLModel, table=True):
@@ -174,7 +181,7 @@ class Seat(SQLModel, table=True):
     seat_no: str = Field(primary_key=True, max_length=4)
     fare_conditions: str = Field(max_length=10, nullable=False)
 
-    aircraft: Optional[Aircraft] = Relationship(back_populates="seats")
+    aircraft: Aircraft | None = Relationship(back_populates="seats")
 
 
 class TicketFlight(SQLModel, table=True):
@@ -189,8 +196,8 @@ class TicketFlight(SQLModel, table=True):
     fare_conditions: str = Field(max_length=10, nullable=False)
     amount: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
 
-    ticket: Optional[Ticket] = Relationship(back_populates="ticket_flights")
-    flight: Optional[Flight] = Relationship(back_populates="ticket_flights")
+    ticket: Ticket | None = Relationship(back_populates="ticket_flights")
+    flight: Flight | None = Relationship(back_populates="ticket_flights")
 
 
 class BoardingPass(SQLModel, table=True):
@@ -205,5 +212,5 @@ class BoardingPass(SQLModel, table=True):
     boarding_no: int = Field(nullable=False)
     seat_no: str = Field(max_length=4, nullable=False)
 
-    ticket: Optional[Ticket] = Relationship(back_populates="boarding_passes")
-    flight: Optional[Flight] = Relationship(back_populates="boarding_passes")
+    ticket: Ticket | None = Relationship(back_populates="boarding_passes")
+    flight: Flight | None = Relationship(back_populates="boarding_passes")

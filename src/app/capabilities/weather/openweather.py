@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
 from .exceptions import (
-    WeatherAPITimeoutError,
-    WeatherAPIRateLimitError,
+    WeatherAPIError,
     WeatherAPIInvalidLocationError,
     WeatherAPIInvalidResponseError,
-    WeatherAPIError,
+    WeatherAPIRateLimitError,
+    WeatherAPITimeoutError,
 )
 
 
@@ -28,7 +27,7 @@ class WeatherLookupResult:
     weather_description: str
     wind_speed: float
     city_name: str
-    country: Optional[str]
+    country: str | None
     raw: dict[str, Any]
 
 

@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
@@ -30,11 +31,11 @@ def _make_json_serializable(value: Any) -> Any:
 
 
 class GetFlightsInput(BaseModel):
-    flight_id: Optional[int] = Field(
+    flight_id: int | None = Field(
         None,
         description="Unique integer ID of the flight.",
     )
-    flight_no: Optional[str] = Field(
+    flight_no: str | None = Field(
         None,
         min_length=1,
         max_length=6,
@@ -62,14 +63,14 @@ class GetFlightsInput(BaseModel):
 @tool(args_schema=GetFlightsInput)
 def get_flights(
     config: RunnableConfig,
-    flight_id: Optional[int] = None,
-    flight_no: Optional[str] = None,
+    flight_id: int | None = None,
+    flight_no: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
     """Retrieve flight details by either flight_id (single) or flight_no (list)."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -125,11 +126,11 @@ class FindFlightsBetweenAirportsInput(BaseModel):
         max_length=3,
         description="3-character IATA/airport code of arrival airport (e.g. 'LED').",
     )
-    scheduled_date: Optional[date] = Field(
+    scheduled_date: date | None = Field(
         None,
         description="Optional filter by scheduled departure date (YYYY-MM-DD).",
     )
-    status: Optional[str] = Field(
+    status: str | None = Field(
         None,
         max_length=20,
         description="Optional filter by flight status (e.g., 'Scheduled', 'On Time', 'Delayed', 'Departed', 'Arrived', 'Cancelled').",
@@ -152,14 +153,14 @@ def find_flights_between_airports(
     config: RunnableConfig,
     departure_airport: str,
     arrival_airport: str,
-    scheduled_date: Optional[date] = None,
-    status: Optional[str] = None,
+    scheduled_date: date | None = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
     """Find flights between departure and arrival airports with optional date and status filters."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -208,7 +209,7 @@ def get_flight_status(
 ) -> dict:
     """Show detailed operational status for a specific flight."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -256,7 +257,7 @@ def analyze_flight_schedules(
 ) -> dict:
     """Analyze actual vs scheduled departures and arrivals across flights based on status."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -289,11 +290,11 @@ def analyze_flight_schedules(
 
 
 class GetAircraftInput(BaseModel):
-    flight_id: Optional[int] = Field(
+    flight_id: int | None = Field(
         None,
         description="Unique integer ID of the flight to get the assigned aircraft for.",
     )
-    aircraft_code: Optional[str] = Field(
+    aircraft_code: str | None = Field(
         None,
         min_length=3,
         max_length=3,
@@ -321,14 +322,14 @@ class GetAircraftInput(BaseModel):
 @tool(args_schema=GetAircraftInput)
 def get_aircraft_for_flight(
     config: RunnableConfig,
-    flight_id: Optional[int] = None,
-    aircraft_code: Optional[str] = None,
+    flight_id: int | None = None,
+    aircraft_code: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
     """Find the aircraft assigned to a flight, or list flights operated by an aircraft code."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -395,7 +396,7 @@ def analyze_high_traffic_routes(
 ) -> dict:
     """Analyze high-traffic routes and calculate their traffic volume and associated revenue."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:

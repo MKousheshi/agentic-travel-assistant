@@ -1,13 +1,13 @@
 from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 
 from langchain_core.tools import tool
 from langgraph.graph.state import RunnableConfig
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session
+
 from app.capabilities.booking import services
 from app.models import Confirmation
 
@@ -29,7 +29,7 @@ class GetBookingInput(BaseModel):
 def get_booking_by_ref(book_ref: str, config: RunnableConfig) -> dict:
     """Retrieve complete booking information using its booking reference."""
 
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for get_booking_by_ref."
@@ -56,15 +56,15 @@ def get_booking_by_ref(book_ref: str, config: RunnableConfig) -> dict:
 
 
 class SearchBookingsInput(BaseModel):
-    date_book: Optional[date] = Field(
+    date_book: date | None = Field(
         default=None,
         description="Exact booking date in YYYY-MM-DD format.",
     )
-    date_from: Optional[date] = Field(
+    date_from: date | None = Field(
         default=None,
         description="Start date of the search range in YYYY-MM-DD format.",
     )
-    date_to: Optional[date] = Field(
+    date_to: date | None = Field(
         default=None,
         description="End date of the search range in YYYY-MM-DD format.",
     )
@@ -105,9 +105,9 @@ def format_validation_error(error: Exception) -> str:
 @tool(args_schema=SearchBookingsInput)
 def search_bookings(
     config: RunnableConfig,
-    date_book: Optional[date] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
+    date_book: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     limit: int = 10,
 ) -> dict:
     """
@@ -117,7 +117,7 @@ def search_bookings(
     - date_book: an exact booking date
     - date_from and date_to: an inclusive date range
     """
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError("Session is required in RunnableConfig for search_bookings.")
 
@@ -176,7 +176,7 @@ def calculate_booking_analytics(
     """
     Calculate revenue (total_amount sum) and booking count for a date range.
     """
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError(
             "Session is required in RunnableConfig for calculate_booking_analytics."
@@ -228,7 +228,7 @@ def create_booking(
     """
     Create a new booking with a unique book_ref, total_amount, and book_date.
     """
-    session: Optional[Session] = config.get("configurable", {}).get("session", None)
+    session: Session | None = config.get("configurable", {}).get("session", None)
     if not session:
         raise ValueError("Session is required in RunnableConfig for create_booking.")
 
@@ -245,7 +245,7 @@ def create_booking(
         }
     except Exception as e:
         return {
-            "message": f"Failed to create booking: {str(e)}",
+            "message": f"Failed to create booking: {e!s}",
             "booking": None,
         }
 
@@ -262,6 +262,7 @@ class DeleteBookingInput(BaseModel):
         description="Reference of the booking to delete.",
     )
 
+
 @tool(args_schema=DeleteBookingInput)
 def delete_booking_with_dependency_check(
     config: RunnableConfig,
@@ -277,18 +278,14 @@ def delete_booking_with_dependency_check(
     - message
     """
 
-    session: Optional[Session] = (
-        config.get("configurable", {}).get("session")
-    )
+    session: Session | None = config.get("configurable", {}).get("session")
 
     if session is None:
         return {
             "success": False,
             "retryable": False,
             "error_code": "MISSING_DATABASE_SESSION",
-            "message": (
-                "A database session is required to delete the booking."
-            ),
+            "message": ("A database session is required to delete the booking."),
         }
 
     # This operation is read-only and is safe to repeat after interrupt
@@ -304,8 +301,7 @@ def delete_booking_with_dependency_check(
             "retryable": False,
             "error_code": "BOOKING_PREVIEW_FAILED",
             "message": (
-                f"Could not check whether booking '{book_ref}' "
-                f"can be deleted: {e}"
+                f"Could not check whether booking '{book_ref}' can be deleted: {e}"
             ),
         }
 
@@ -316,8 +312,7 @@ def delete_booking_with_dependency_check(
             "retryable": False,
             "error_code": "BOOKING_NOT_FOUND",
             "message": (
-                f"Booking '{book_ref}' was not found. "
-                "No deletion was necessary."
+                f"Booking '{book_ref}' was not found. No deletion was necessary."
             ),
         }
 
@@ -336,12 +331,10 @@ def delete_booking_with_dependency_check(
             "message": "The user cancelled the booking deletion.",
         }
 
-
     services.delete_booking_by_ref(
         session,
         book_ref=book_ref,
     )
-
 
     return {
         "success": True,

@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import delete, func
 from sqlalchemy.orm import selectinload
@@ -34,7 +34,7 @@ def _validate_pagination(limit: int, offset: int) -> None:
 def get_ticket_by_number(
     session: Session,
     ticket_no: str,
-) -> Optional[Ticket]:
+) -> Ticket | None:
     """
     Retrieve one ticket by ticket number.
 
@@ -226,8 +226,7 @@ def delete_ticket(
 
     if boarding_pass_exists is not None:
         raise TicketDeletionError(
-            f"Cannot delete ticket '{ticket_no}': "
-            "it has one or more boarding passes."
+            f"Cannot delete ticket '{ticket_no}': it has one or more boarding passes."
         )
 
     ticket_flight_count = session.exec(
@@ -271,7 +270,7 @@ def analyze_ticket_fares(
     """
     if segment_limit < 1 or segment_limit > MAX_ANALYSIS_SEGMENTS:
         raise ValueError(
-            f"segment_limit must be between 1 and " f"{MAX_ANALYSIS_SEGMENTS}."
+            f"segment_limit must be between 1 and {MAX_ANALYSIS_SEGMENTS}."
         )
 
     if segment_offset < 0:

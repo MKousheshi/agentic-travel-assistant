@@ -1,9 +1,8 @@
 from dataclasses import asdict
-from typing import Optional, Any
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from sqlmodel import Session
 
 from app.capabilities.weather.services import WeatherService
 

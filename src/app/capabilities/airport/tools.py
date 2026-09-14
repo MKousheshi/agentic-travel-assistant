@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -28,7 +29,7 @@ def get_airport_by_code(
 ) -> dict:
     """Search and retrieve airport entity by its unique 3-character airport code."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -87,7 +88,7 @@ def search_airports_by_city(
 ) -> dict:
     """Search for airports located in a specific city."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -140,7 +141,7 @@ def get_airport_details(
 ) -> dict:
     """Display localized airport details including airport_name, city, coordinates, and timezone."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -206,7 +207,7 @@ def get_airport_flights(
 ) -> dict:
     """Find incoming (arrivals) and/or outgoing (departures) flights for an airport."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:
@@ -215,8 +216,8 @@ def get_airport_flights(
         )
 
     airport_code_clean = airport_code.upper()
-    incoming_flights: List[Flight] = []
-    outgoing_flights: List[Flight] = []
+    incoming_flights: list[Flight] = []
+    outgoing_flights: list[Flight] = []
 
     if direction in ("incoming", "both"):
         incoming_flights = services.get_incoming_flights(
@@ -234,7 +235,7 @@ def get_airport_flights(
             offset=offset,
         )
 
-    result_data: Dict[str, Any] = {}
+    result_data: dict[str, Any] = {}
     if direction in ("incoming", "both"):
         result_data["incoming"] = [f.model_dump() for f in incoming_flights]
     if direction in ("outgoing", "both"):
@@ -261,13 +262,13 @@ def get_airport_flights(
 
 
 class ResolveWeatherLocationInput(BaseModel):
-    airport_code: Optional[str] = Field(
+    airport_code: str | None = Field(
         None,
         min_length=3,
         max_length=3,
         description="3-character airport code (e.g. 'DME') to resolve location coordinates/city.",
     )
-    flight_id: Optional[int] = Field(
+    flight_id: int | None = Field(
         None,
         description="Flight ID to resolve origin and destination locations for weather lookup.",
     )
@@ -280,13 +281,13 @@ class ResolveWeatherLocationInput(BaseModel):
 @tool(args_schema=ResolveWeatherLocationInput)
 def resolve_weather_location(
     config: RunnableConfig,
-    airport_code: Optional[str] = None,
-    flight_id: Optional[int] = None,
+    airport_code: str | None = None,
+    flight_id: int | None = None,
     lang: str = "en",
 ) -> dict:
     """Resolve geographic location, city, and coordinates from an airport code or flight ID for weather lookup."""
 
-    session: Optional[Session] = (
+    session: Session | None = (
         config.get("configurable", {}).get("session", None) if config else None
     )
     if not session:

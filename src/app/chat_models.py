@@ -1,4 +1,5 @@
 from langchain_openai import ChatOpenAI
+
 from app.config import get_settings
 
 mini_model = ChatOpenAI(

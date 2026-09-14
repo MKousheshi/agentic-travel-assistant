@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional, Literal
+from typing import Any, Literal
 
 from sqlmodel import Session, select
 
-from app.db.schemas import Flight, Airport 
-from .openweather import OpenWeatherMapClient, WeatherLookupResult
+from app.db.schemas import Airport, Flight
+
 from .exceptions import (
-    FlightNotFoundError,
     AirportNotFoundError,
+    FlightNotFoundError,
     WeatherAPIInvalidLocationError,
 )
+from .openweather import OpenWeatherMapClient, WeatherLookupResult
 from .utils import parse_airport_coordinates
-
 
 WeatherTarget = Literal["origin", "destination"]
 
@@ -33,8 +33,8 @@ class FlightWeatherResult:
     target: WeatherTarget
 
     airport_code: str
-    airport_name: Optional[dict[str, Any]]
-    city: Optional[dict[str, Any]]
+    airport_name: dict[str, Any] | None
+    city: dict[str, Any] | None
     location_query: str
 
     weather: dict[str, Any]
@@ -49,7 +49,9 @@ class WeatherService:
     # Public flight-based APIs
     # -------------------------
 
-    def get_current_weather_for_flight_origin(self, flight_id: int) -> FlightWeatherResult:
+    def get_current_weather_for_flight_origin(
+        self, flight_id: int
+    ) -> FlightWeatherResult:
         flight = self._get_flight_by_id(flight_id)
         airport = self._get_airport_by_code(flight.departure_airport)
 
@@ -59,7 +61,9 @@ class WeatherService:
             target="origin",
         )
 
-    def get_current_weather_for_flight_destination(self, flight_id: int) -> FlightWeatherResult:
+    def get_current_weather_for_flight_destination(
+        self, flight_id: int
+    ) -> FlightWeatherResult:
         flight = self._get_flight_by_id(flight_id)
         airport = self._get_airport_by_code(flight.arrival_airport)
 
@@ -88,7 +92,9 @@ class WeatherService:
         results: list[FlightWeatherResult] = []
         for flight in flights:
             airport = self._get_airport_by_code(
-                flight.departure_airport if target == "origin" else flight.arrival_airport
+                flight.departure_airport
+                if target == "origin"
+                else flight.arrival_airport
             )
             results.append(
                 self._build_flight_weather_result(
@@ -149,7 +155,9 @@ class WeatherService:
             },
         )
 
-    def _resolve_and_fetch_weather(self, airport: Airport) -> tuple[str, WeatherLookupResult]:
+    def _resolve_and_fetch_weather(
+        self, airport: Airport
+    ) -> tuple[str, WeatherLookupResult]:
         # 1) Prefer coordinates if valid
         coords = parse_airport_coordinates(airport.coordinates)
         if coords is not None:
@@ -168,7 +176,7 @@ class WeatherService:
             f"Airport '{airport.airport_code}' has no usable coordinates or city."
         )
 
-    def _extract_city_name(self, city_value: Optional[dict[str, Any]]) -> Optional[str]:
+    def _extract_city_name(self, city_value: dict[str, Any] | None) -> str | None:
         if not city_value:
             return None
 

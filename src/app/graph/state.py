@@ -1,7 +1,9 @@
-from typing import Annotated, Any, Literal, Required, TypedDict
+from typing import Annotated, Literal, Required, TypedDict
+
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
+
 from app.models import ExecutionPlan, Feedback, StepResult
 
 
@@ -17,7 +19,6 @@ class ExecutionState(BaseModel):
     pending_question: str | None = None
 
 
-
 class WorkflowState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
     plan: ExecutionPlan
@@ -25,4 +26,3 @@ class WorkflowState(TypedDict, total=False):
     execution: ExecutionState
     user_message: str
     retries: int
-    

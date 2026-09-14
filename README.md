@@ -48,6 +48,7 @@ The main project modules are organized as follows:
 
 ```text
 app/
+├── api/
 ├── capabilities/
 │   ├── airport/
 │   ├── booking/
@@ -57,14 +58,15 @@ app/
 ├── db/
 ├── graph/
 ├── prompts/
-└── main.py
+└── ui/
 ```
 
+- `api/`: FastAPI backend — owns the graph, checkpointer, and DB sessions, and streams the run over SSE.
 - `capabilities/`: Domain-specific packages that expose actions the agent can perform.
 - `db/`: Database setup and shared persistence infrastructure.
 - `graph/`: LangGraph workflow, nodes, transitions, and execution control flow.
 - `prompts/`: System prompts used by the planner, evaluators, and response synthesis stages.
-- `main.py`: Chainlit application entry point.
+- `ui/`: Chainlit application — a thin HTTP/SSE client of the backend, with no dependency on the graph, DB, or config.
 
 ## Architecture Diagram
 
@@ -291,19 +293,29 @@ Then fill in the required values, such as the API key and configuration required
 
 ## Running the Project
 
-After installing dependencies and configuring environment variables, start the Chainlit application from the project root:
+The app is split into two processes: a FastAPI backend that owns the agent, the database session, and the checkpointer, and a Chainlit UI that talks to it purely over HTTP/SSE. Start both, from the project root, after installing dependencies and configuring environment variables.
+
+Backend:
 
 ```bash
-uv run chainlit run src/app/main.py
+uv run api
 ```
 
-For development mode with automatic reload on file changes:
+UI, in a second terminal:
 
 ```bash
-uv run chainlit run src/app/main.py -w
+uv run ui
 ```
 
-Chainlit will display the local application URL in the terminal after startup.
+Chainlit will display the local application URL in the terminal after startup (port 8001, since Chainlit's own default port collides with the API's). The UI reads the backend's address from the `API_BASE_URL` environment variable, defaulting to `http://localhost:8000`.
+
+`uv run api` and `uv run ui` are shorthand for `uv run uvicorn app.api.server:app --reload` and `uv run chainlit run src/app/ui/chainlit_app.py -w --port 8001`, respectively.
+
+### Backend API
+
+- `GET /health` — liveness check.
+- `POST /threads/{thread_id}/stream` — runs the graph for a thread and streams the result as Server-Sent Events. The body is `{"message": "..."}` for a new user message or `{"resume": {...}}` to answer a pending confirmation/clarification. Event types: `node` (an intermediate step's output), `token` (the final answer streaming in), `message` (the complete final answer), `interrupt` (a confirmation is required), `error`, and `end`.
+- `DELETE /threads/{thread_id}` — idempotently drops a thread's session and checkpoint.
 
 ## Example Prompts
 

@@ -164,4 +164,7 @@ private/
 .files
 .vscode
 .langgraph_api
+.ruff_cache
 TODO
+.claude/plans/
+.claude/settings.local.json

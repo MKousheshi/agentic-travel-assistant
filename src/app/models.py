@@ -1,9 +1,6 @@
-from uuid import UUID, uuid4
-from typing import Any, Dict, Literal, Union
+from typing import Any, Literal, Union
 
-from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
-from pydantic.v1.typing import AnyArgTCallable
 
 
 class PlanStepDraft(BaseModel):
@@ -90,7 +87,7 @@ class PlanResponse(BaseModel):
     )
     response: ExecutionPlan = Field(
         description=(
-            "The execution plan to return when the request is fully " "actionable."
+            "The execution plan to return when the request is fully actionable."
         )
     )
 
@@ -162,7 +159,6 @@ CapabilityResult = Union[
 ]
 
 
-
 class ResponseSynthesisInput(BaseModel):
     outcome: Literal[
         "success",
@@ -201,5 +197,5 @@ class Feedback(BaseModel):
 
 class Confirmation(BaseModel):
     message: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     confirmed: bool = False

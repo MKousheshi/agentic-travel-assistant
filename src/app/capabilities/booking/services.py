@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, delete, func, select
-from app.db.schemas import Booking, Ticket, TicketFlight, BoardingPass
+
+from app.db.schemas import BoardingPass, Booking, Ticket, TicketFlight
 
 
 def get_booking_by_ref(
@@ -79,7 +80,7 @@ def search_bookings_for_date(
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
 
-    start_dt = datetime.combine(booking_date, time.min, tzinfo=timezone.utc)
+    start_dt = datetime.combine(booking_date, time.min, tzinfo=UTC)
     end_dt = start_dt + timedelta(days=1)
 
     statement = (

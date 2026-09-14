@@ -1,21 +1,22 @@
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from langchain.agents.middleware.types import InputAgentState
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
-from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, SystemMessage
-from app.graph.state import WorkflowState, ExecutionState
+
+from app.agents import eval_agent, planner_agent, synthesizer_model
+from app.config import get_settings
+from app.graph.state import ExecutionState, WorkflowState
 from app.models import (
-    PlannerResponse,
-    PlanResponse,
     ClarificationResponse,
     Feedback,
+    PlannerResponse,
+    PlanResponse,
     StepResult,
 )
-from app.agents import planner_agent, eval_agent, synthesizer_model
-from app.config import get_settings
-from app.registry import registry
 from app.prompts.synthesizer import SYNTHESIZER_PROMPT
+from app.registry import registry
 
 
 @traceable
@@ -28,7 +29,7 @@ def route_from_start(state: WorkflowState) -> Literal["execution", "planning"]:
 
 @traceable
 def create_plan(state: WorkflowState) -> dict:
-    messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
+    messages: list[AnyMessage | dict[str, Any]] = list(state["messages"])
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
     retries = state.get("retries", 0)
@@ -106,7 +107,7 @@ def route_after_validation(state: WorkflowState) -> Literal["exit", "next", "pla
 
 @traceable
 def validate_plan_by_llm(state: WorkflowState) -> dict:
-    messages: list[AnyMessage | Dict[str, Any]] = list(state["messages"])
+    messages: list[AnyMessage | dict[str, Any]] = list(state["messages"])
     plan = state.get("plan", None)
     retries = state.get("retries", 0)
     if not plan:
@@ -154,7 +155,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     plan = state.get("plan", None)
     if not plan or not execution:
         return {}
-    print('execution', execution.current_step_index)
+    print("execution", execution.current_step_index)
     step = plan.steps[execution.current_step_index]
     capability = registry.get(step.capability_id)
     if not capability:
@@ -168,7 +169,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
         config,
     )
     next_exec_state = execution.model_copy()
-    match (result.status):
+    match result.status:
         case "success":
             next_exec_state.results.append(
                 StepResult(message=result.message, data=result.data, step=step)
@@ -193,17 +194,15 @@ def synthesize(state: WorkflowState) -> dict:
 
     if not execution or not plan:
         return {}
-    match (execution.status):
+    match execution.status:
         case "completed":
             response = synthesizer_model.invoke(
                 [
                     SystemMessage(
                         SYNTHESIZER_PROMPT.format(
-                            **{
-                                "user_request": plan.user_query,
-                                "conversation": state["messages"],
-                                "step_results": execution.results,
-                            }
+                            user_request=plan.user_query,
+                            conversation=state["messages"],
+                            step_results=execution.results,
                         )
                     )
                 ]
