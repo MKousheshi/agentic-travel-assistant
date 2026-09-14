@@ -317,6 +317,19 @@ Chainlit will display the local application URL in the terminal after startup (p
 - `POST /threads/{thread_id}/stream` — runs the graph for a thread and streams the result as Server-Sent Events. The body is `{"message": "..."}` for a new user message or `{"resume": {...}}` to answer a pending confirmation/clarification. Event types: `node` (an intermediate step's output), `token` (the final answer streaming in), `message` (the complete final answer), `interrupt` (a confirmation is required), `error`, and `end`.
 - `DELETE /threads/{thread_id}` — idempotently drops a thread's session and checkpoint.
 
+## Testing & Verification
+
+Tests are split by cost:
+
+- `tests/free` — zero-cost, runs against a fake graph and fake session; no LLM calls and no `.env` required.
+- `tests/paid` — calls the real LLM through the full graph; human-only, run via `./scripts/test-paid.sh` (asks for a typed confirmation).
+
+```bash
+./scripts/verify.sh   # format, lint, pyright, mypy, bandit, pip-audit, then tests/free
+uv run pytest          # tests/free only
+./scripts/test-paid.sh # tests/paid, real LLM, interactive confirmation required
+```
+
 ## Example Prompts
 
 Example prompts and test scenarios are available in:
@@ -325,7 +338,7 @@ Example prompts and test scenarios are available in:
 tests.md
 ```
 
-These examples demonstrate the supported workflows for the booking, ticket, flight, and airport capabilities.
+These examples demonstrate the supported workflows for the booking, ticket, flight, and airport capabilities. Scenario 1 is also encoded as the automated (paid) `tests/paid/test_graph_smoke.py`.
 
 ## Known Failure Modes and Limitations
 

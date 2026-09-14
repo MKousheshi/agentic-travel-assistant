@@ -33,10 +33,34 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "bandit[toml]>=1.9.4",
+    "mypy>=2.3.1",
+    "pip-audit>=2.10.1",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "ruff>=0.16.7",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/free"]
+markers = ["paid: calls the real LLM; manual-only"]
+addopts = "--strict-markers"
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+
+[tool.ruff]
+target-version = "py312"

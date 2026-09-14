@@ -11,20 +11,33 @@ uv sync            # install deps incl. dev group
 uv run api         # run the backend (FastAPI + SSE, auto-reload, port 8000)
 uv run ui          # run the UI (thin Chainlit HTTP client, auto-reload, port 8001)
 
-uv run ruff check src                     # lint
-uv run ruff format src                    # format
-uv run pyright src                        # type check
+./scripts/verify.sh                            # full pipeline: format, lint, pyright, mypy, bandit, pip-audit, free tests
+./scripts/test-paid.sh                         # human-only: runs tests/paid against the real LLM, see Verification below
 
-uv run pytest                             # all tests
-uv run pytest tests/test_x.py::test_name  # single test
+uv run ruff check src tests                    # lint
+uv run ruff format src tests                   # format
+uv run pyright                                 # type check
+uv run mypy                                    # type check (second checker; see Verification below)
+
+uv run pytest                                       # all free tests (testpaths = tests/free)
+uv run pytest tests/free/test_x.py::test_name       # single test
 ```
 
 - The app is split into two processes: a FastAPI backend (`src/app/api/`) that owns the graph, the checkpointer, and the DB session, and a Chainlit UI (`src/app/ui/chainlit_app.py`) that is a pure HTTP/SSE client of it. Run both; the UI reads the backend's base URL from `API_BASE_URL` (default `http://localhost:8000`). `uv run api` and `uv run ui` are `[project.scripts]` entry points (`src/app/scripts.py`) that just `exec` the equivalent `uvicorn`/`chainlit` CLI invocations — the UI is pinned to port 8001 because Chainlit's own default (8000) collides with the API's.
-- `tests/test_api.py` covers the backend's SSE protocol against a fake graph and fake session — no LLM calls and no `.env` required. `tests.md` is a manual scenario list (Persian prompts, expected results, pass/fail status) for the full LLM-backed flow, not automated tests.
-- Lint/typecheck baseline is not clean (ruff reports ~179 issues, ~16 files unformatted; pyright ~55 errors). Don't mass-fix or reformat unrelated files as part of a feature change — check that your change doesn't add new errors in the files you touch.
-- Configuration comes from `.env` (see `.env.example`) through `pydantic-settings` in `src/app/config.py`. `OPENAI_API_KEY`, `DB_PATH`, `LANGSMITH_API_KEY` and `OPENAI_BASE_URL` are required, and several modules read settings **at import time** (`chat_models.py` builds `ChatOpenAI` clients, `db/engine.py` creates the SQLite engine). Only the backend process needs these; the UI process needs none of them. Tests that import `app.*` need these env vars set (dummy values are fine for code that doesn't call the LLM).
+- `tests.md` is a manual scenario list (Persian prompts, expected results, pass/fail status) for the full LLM-backed flow, not automated tests. Scenario 1 in it is also encoded as `tests/paid/test_graph_smoke.py`.
+- Lint/typecheck baseline is not clean: `ruff check src tests` reports ~24 issues (format is clean), `pyright` ~55 errors, `mypy` ~76 errors. Don't mass-fix or reformat unrelated files as part of a feature change — check that your change doesn't add new errors in the files you touch. `bandit` is currently clean. `pip-audit` currently fails: the pinned `chainlit` has a real, disclosed SSRF advisory (fixed in 2.12.0) that only bites when Chainlit's MCP feature is enabled, which this app doesn't use; fixing it (a version bump) is out of scope for the verification pipeline itself.
+- Configuration comes from `.env` (see `.env.example`) through `pydantic-settings` in `src/app/config.py`. `OPENAI_API_KEY`, `DB_PATH`, `LANGSMITH_API_KEY` and `OPENAI_BASE_URL` are required, and several modules read settings **at import time** (`chat_models.py` builds `ChatOpenAI` clients, `db/engine.py` creates the SQLite engine). Only the backend process needs these; the UI process needs none of them. `tests/free/conftest.py` sets dummy values for all of these before any `app.*` import, so free tests need no `.env`.
 - The SQLite database is `var/travel.sqlite` (airline demo dataset). Tables are modeled in `src/app/db/schemas.py`; there are no migrations.
-- **Never run the app end-to-end against the real LLM to "verify" a change, and never drive it through a browser.** Starting `uvicorn`/`chainlit` and sending prompts through them burns the user's real `OPENAI_API_KEY` quota. `uv run pytest`, `ruff`, and `pyright` are the verification budget for automated changes; the user runs the app manually themselves when they want to see it work.
+
+## Verification
+
+After implementing a change that modifies the codebase, run `./scripts/verify.sh` and fix any failures your change introduced; the baseline numbers above tell you what was already failing before you touched anything. Review the files `ruff format`/`ruff check --fix` touched (the script lists them). Don't loosen tool config, add blanket ignores, or edit the guard files (`scripts/verify.sh`, `scripts/test-paid.sh`, `tests/free/conftest.py`, `tests/paid/conftest.py`, `.claude/settings.local.json`) to make the pipeline pass — file-permission rules block editing them anyway. Report the script's final summary table to the user.
+
+**Never run the app end-to-end against the real LLM to "verify" a change, and never drive it through a browser.** Starting `uvicorn`/`chainlit` and sending prompts through them burns the user's real `OPENAI_API_KEY` quota. `./scripts/verify.sh` is the verification budget for automated changes.
+
+**Test layout:** `tests/free` is zero-cost (fakes only, no real LLM) and is what the pipeline runs. `tests/paid` calls the real LLM and is human-only, via `scripts/test-paid.sh`. The two guards are split: `tests/paid/conftest.py` refuses to collect unless `RUN_PAID_TESTS=1` is set and no agent-identifying env var (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `AI_AGENT`) is present, so setting `RUN_PAID_TESTS=1` from inside an agent session still gets refused; the interactive-TTY check and the typed `yes` confirmation live in `scripts/test-paid.sh`, not in the conftest. You may write tests in `tests/paid`, but never run them yourself. Put new tests in `tests/free` with fakes/mocks unless they genuinely need the real model.
+
+**Git:** only read-only git commands are available to you (`status`, `diff`, `log`, `show`, `blame`, `ls-files`, `rev-parse`, `grep`); every mutating subcommand (`commit`, `push`, `fetch`, `pull`, `merge`, `rebase`, `reset`, `checkout`, `switch`, `restore`, `add`, `rm`, `mv`, `clean`, `cherry-pick`, `revert`, `am`, `apply`, `stash`, `tag`, `branch`, `remote`, `config`, `submodule`, `worktree`, `gc`, `prune`, `notes`, `update-ref`, `update-index`, `filter-branch`, `bisect`, `init`, `clone`) is denied in both the plain and `git -C <dir>` forms. This is enforced by `.claude/settings.local.json` in addition to being a standing rule here. The user runs all of these manually.
 
 ## Architecture
 
