@@ -1,9 +1,9 @@
 import json
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlalchemy.orm import QueryableAttribute, selectinload
+from sqlmodel import Session, col, select
 
 from app.db.schemas import (
     Airport,
@@ -24,9 +24,9 @@ def _validate_pagination(limit: int, offset: int) -> None:
 def _flight_load_options() -> tuple:
     """Eager-load airports and aircraft for flight queries."""
     return (
-        selectinload(Flight.departure_airport_rel),
-        selectinload(Flight.arrival_airport_rel),
-        selectinload(Flight.aircraft),
+        selectinload(cast(QueryableAttribute, Flight.departure_airport_rel)),
+        selectinload(cast(QueryableAttribute, Flight.arrival_airport_rel)),
+        selectinload(cast(QueryableAttribute, Flight.aircraft)),
     )
 
 
@@ -207,7 +207,7 @@ def get_incoming_flights(
     statement = (
         select(Flight)
         .where(Flight.arrival_airport == airport_code)
-        .order_by(Flight.scheduled_arrival, Flight.flight_id)
+        .order_by(col(Flight.scheduled_arrival), col(Flight.flight_id))
         .offset(offset)
         .limit(limit)
         .options(*_flight_load_options())
@@ -230,7 +230,7 @@ def get_outgoing_flights(
     statement = (
         select(Flight)
         .where(Flight.departure_airport == airport_code)
-        .order_by(Flight.scheduled_departure, Flight.flight_id)
+        .order_by(col(Flight.scheduled_departure), col(Flight.flight_id))
         .offset(offset)
         .limit(limit)
         .options(*_flight_load_options())

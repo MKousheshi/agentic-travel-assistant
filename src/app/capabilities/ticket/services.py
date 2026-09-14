@@ -1,9 +1,9 @@
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlalchemy.orm import QueryableAttribute, selectinload
+from sqlmodel import Session, col, select
 
 from app.db.schemas import (
     BoardingPass,
@@ -45,8 +45,8 @@ def get_ticket_by_number(
         select(Ticket)
         .where(Ticket.ticket_no == ticket_no)
         .options(
-            selectinload(Ticket.booking),
-            selectinload(Ticket.ticket_flights),
+            selectinload(cast(QueryableAttribute, Ticket.booking)),
+            selectinload(cast(QueryableAttribute, Ticket.ticket_flights)),
         )
     )
 
@@ -71,13 +71,15 @@ def get_tickets_by_passenger_id(
     statement = (
         select(Ticket)
         .where(func.replace(Ticket.passenger_id, " ", "") == normalized_id)
-        .order_by(Ticket.ticket_no)
+        .order_by(col(Ticket.ticket_no))
         .offset(offset)
         .limit(limit)
         .options(
-            selectinload(Ticket.booking),
-            selectinload(Ticket.ticket_flights).selectinload(TicketFlight.flight),
-            selectinload(Ticket.boarding_passes),
+            selectinload(cast(QueryableAttribute, Ticket.booking)),
+            selectinload(cast(QueryableAttribute, Ticket.ticket_flights)).selectinload(
+                cast(QueryableAttribute, TicketFlight.flight)
+            ),
+            selectinload(cast(QueryableAttribute, Ticket.boarding_passes)),
         )
     )
 
@@ -100,16 +102,16 @@ def get_flights_by_ticket_no(
         select(Flight)
         .join(
             TicketFlight,
-            TicketFlight.flight_id == Flight.flight_id,
+            col(TicketFlight.flight_id) == col(Flight.flight_id),
         )
         .where(TicketFlight.ticket_no == ticket_no)
-        .order_by(Flight.flight_id)
+        .order_by(col(Flight.flight_id))
         .offset(offset)
         .limit(limit)
         .options(
-            selectinload(Flight.departure_airport_rel),
-            selectinload(Flight.arrival_airport_rel),
-            selectinload(Flight.aircraft),
+            selectinload(cast(QueryableAttribute, Flight.departure_airport_rel)),
+            selectinload(cast(QueryableAttribute, Flight.arrival_airport_rel)),
+            selectinload(cast(QueryableAttribute, Flight.aircraft)),
         )
     )
 
@@ -239,7 +241,7 @@ def delete_ticket(
     passenger_id = ticket.passenger_id
 
     # Delete dependent rows first because no ORM cascade was configured.
-    session.exec(delete(TicketFlight).where(TicketFlight.ticket_no == ticket_no))
+    session.exec(delete(TicketFlight).where(col(TicketFlight.ticket_no) == ticket_no))
 
     session.delete(ticket)
 
@@ -286,7 +288,7 @@ def analyze_ticket_fares(
     # Overall aggregate across all segments.
     aggregate = session.exec(
         select(
-            func.count(TicketFlight.flight_id),
+            func.count(col(TicketFlight.flight_id)),
             func.coalesce(
                 func.sum(TicketFlight.amount),
                 Decimal("0.00"),
@@ -305,7 +307,7 @@ def analyze_ticket_fares(
     grouped_rows = session.exec(
         select(
             TicketFlight.fare_conditions,
-            func.count(TicketFlight.flight_id),
+            func.count(col(TicketFlight.flight_id)),
             func.sum(TicketFlight.amount),
         )
         .where(TicketFlight.ticket_no == ticket_no)
@@ -325,7 +327,7 @@ def analyze_ticket_fares(
     segment_rows = session.exec(
         select(TicketFlight)
         .where(TicketFlight.ticket_no == ticket_no)
-        .order_by(TicketFlight.flight_id)
+        .order_by(col(TicketFlight.flight_id))
         .offset(segment_offset)
         .limit(segment_limit)
     ).all()

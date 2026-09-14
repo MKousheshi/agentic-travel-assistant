@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain.agents import create_agent
@@ -37,7 +37,7 @@ def ticket_capability(
         model=capability_model,
         tools=ticket_tools,
         system_prompt=CAPABILITY_PROMPT.format(
-            current_date=date.today().isoformat(),
+            current_date=datetime.now(UTC).date().isoformat(),
             action=step.action,
             goal=step.goal,
         ),

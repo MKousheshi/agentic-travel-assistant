@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, delete, func, select
+from sqlmodel import Session, col, delete, func, select
 
 from app.db.schemas import BoardingPass, Booking, Ticket, TicketFlight
 
@@ -48,9 +48,8 @@ def search_bookings_by_date_range(
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
 
-    if start_date is not None and end_date is not None:
-        if start_date > end_date:
-            raise ValueError("start_date cannot be later than end_date")
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise ValueError("start_date cannot be later than end_date")
 
     statement = select(Booking)
 
@@ -60,7 +59,7 @@ def search_bookings_by_date_range(
     if end_date is not None:
         statement = statement.where(Booking.book_date <= end_date)
 
-    statement = statement.order_by(Booking.book_date.desc()).limit(limit)
+    statement = statement.order_by(col(Booking.book_date).desc()).limit(limit)
 
     return list(session.exec(statement).all())
 
@@ -87,7 +86,7 @@ def search_bookings_for_date(
         select(Booking)
         .where(Booking.book_date >= start_dt)
         .where(Booking.book_date < end_dt)
-        .order_by(Booking.book_date.desc())
+        .order_by(col(Booking.book_date).desc())
         .limit(limit)
     )
 
@@ -119,8 +118,8 @@ def calculate_booking_revenue(
         total_revenue = Decimal("0.00")
     """
     statement = select(
-        func.count(Booking.book_ref),
-        func.coalesce(func.sum(Booking.total_amount), Decimal("0.00")),
+        func.count(col(Booking.book_ref)),
+        func.coalesce(func.sum(col(Booking.total_amount)), Decimal("0.00")),
     )
 
     if start_date is not None:
@@ -208,28 +207,24 @@ def delete_booking_by_ref(session: Session, *, book_ref: str) -> int:
     # Subquery identifying all ticket numbers belonging to this booking reference
     ticket_subquery = select(Ticket.ticket_no).where(Ticket.book_ref == book_ref)
 
-    try:
-        with session.begin_nested():
-            # 2. Delete boarding passes associated with matching tickets
-            session.exec(
-                delete(BoardingPass).where(BoardingPass.ticket_no.in_(ticket_subquery))
-            )
+    with session.begin_nested():
+        # 2. Delete boarding passes associated with matching tickets
+        session.exec(
+            delete(BoardingPass).where(col(BoardingPass.ticket_no).in_(ticket_subquery))
+        )
 
-            # 3. Delete ticket flights associated with matching tickets
-            session.exec(
-                delete(TicketFlight).where(TicketFlight.ticket_no.in_(ticket_subquery))
-            )
+        # 3. Delete ticket flights associated with matching tickets
+        session.exec(
+            delete(TicketFlight).where(col(TicketFlight.ticket_no).in_(ticket_subquery))
+        )
 
-            # 4. Delete tickets associated with this book_ref
-            session.exec(delete(Ticket).where(Ticket.book_ref == book_ref))
+        # 4. Delete tickets associated with this book_ref
+        session.exec(delete(Ticket).where(col(Ticket.book_ref) == book_ref))
 
-            # 5. Delete all matching bookings in bulk
-            session.exec(delete(Booking).where(Booking.book_ref == book_ref))
+        # 5. Delete all matching bookings in bulk
+        session.exec(delete(Booking).where(col(Booking.book_ref) == book_ref))
 
-            session.flush()
-
-    except IntegrityError:
-        raise
+        session.flush()
 
     return matching_count
 
@@ -281,14 +276,14 @@ def preview_booking_deletion(
     ticket_flight_count = session.exec(
         select(func.count())
         .select_from(TicketFlight)
-        .join(Ticket, Ticket.ticket_no == TicketFlight.ticket_no)
+        .join(Ticket, col(Ticket.ticket_no) == col(TicketFlight.ticket_no))
         .where(Ticket.book_ref == book_ref)
     ).one()
 
     boarding_pass_count = session.exec(
         select(func.count())
         .select_from(BoardingPass)
-        .join(Ticket, Ticket.ticket_no == BoardingPass.ticket_no)
+        .join(Ticket, col(Ticket.ticket_no) == col(BoardingPass.ticket_no))
         .where(Ticket.book_ref == book_ref)
     ).one()
 

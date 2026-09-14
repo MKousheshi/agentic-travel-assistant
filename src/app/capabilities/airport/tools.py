@@ -317,17 +317,25 @@ def resolve_weather_location(
                 "message": f"Resolved origin and destination weather locations for flight {flight_id}.",
             }
 
+        if airport_code is None:
+            return {
+                "resolved": False,
+                "location_data": None,
+                "message": "Must provide either 'airport_code' or 'flight_id' to resolve weather location.",
+            }
+
+        normalized_code = airport_code.upper()
         location_data = services.resolve_weather_location_by_airport(
             session=session,
-            airport_code=airport_code.upper(),
+            airport_code=normalized_code,
             lang=lang,
         )
         return {
             "resolved": True,
             "type": "airport",
-            "airport_code": airport_code.upper(),
+            "airport_code": normalized_code,
             "location_data": location_data,
-            "message": f"Resolved weather location for airport '{airport_code.upper()}'.",
+            "message": f"Resolved weather location for airport '{normalized_code}'.",
         }
 
     except ValueError as exc:

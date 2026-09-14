@@ -22,6 +22,16 @@ WeatherTarget = Literal["origin", "destination"]
 
 
 @dataclass
+class AirportWeatherResult:
+    airport_code: str
+    airport_name: dict[str, Any] | None
+    city: dict[str, Any] | None
+    location_query: str
+
+    weather: dict[str, Any]
+
+
+@dataclass
 class FlightWeatherResult:
     flight_id: int
     flight_no: str
@@ -71,6 +81,20 @@ class WeatherService:
             flight=flight,
             airport=airport,
             target="destination",
+        )
+
+    def get_current_weather_for_airport(
+        self, airport_code: str
+    ) -> AirportWeatherResult:
+        airport = self._get_airport_by_code(airport_code)
+        location_query, weather = self._resolve_and_fetch_weather(airport)
+
+        return AirportWeatherResult(
+            airport_code=airport.airport_code,
+            airport_name=airport.airport_name,
+            city=airport.city,
+            location_query=location_query,
+            weather=self._weather_payload(weather),
         )
 
     # -------------------------
@@ -142,18 +166,21 @@ class WeatherService:
             airport_name=airport.airport_name,
             city=airport.city,
             location_query=location_query,
-            weather={
-                "temperature_c": weather.temperature_c,
-                "feels_like_c": weather.feels_like_c,
-                "humidity": weather.humidity,
-                "pressure": weather.pressure,
-                "weather_main": weather.weather_main,
-                "weather_description": weather.weather_description,
-                "wind_speed": weather.wind_speed,
-                "city_name": weather.city_name,
-                "country": weather.country,
-            },
+            weather=self._weather_payload(weather),
         )
+
+    def _weather_payload(self, weather: WeatherLookupResult) -> dict[str, Any]:
+        return {
+            "temperature_c": weather.temperature_c,
+            "feels_like_c": weather.feels_like_c,
+            "humidity": weather.humidity,
+            "pressure": weather.pressure,
+            "weather_main": weather.weather_main,
+            "weather_description": weather.weather_description,
+            "wind_speed": weather.wind_speed,
+            "city_name": weather.city_name,
+            "country": weather.country,
+        }
 
     def _resolve_and_fetch_weather(
         self, airport: Airport

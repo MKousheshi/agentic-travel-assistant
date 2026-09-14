@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 def parse_airport_coordinates(value: str) -> tuple[float, float] | None:
@@ -20,8 +23,8 @@ def parse_airport_coordinates(value: str) -> tuple[float, float] | None:
             lon = data.get("lon")
             if lat is not None and lon is not None:
                 return float(lat), float(lon)
-    except Exception:
-        pass
+    except (ValueError, TypeError):
+        logger.debug("Coordinates value is not a JSON lat/lon object: %r", s)
 
     # "lat,lon" or "[lat, lon]"
     numbers = re.findall(r"-?\d+(?:\.\d+)?", s)

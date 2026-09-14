@@ -8,7 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "chainlit>=2.11.1",
+    "chainlit>=2.12.0",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "httpx-sse>=0.4.3",

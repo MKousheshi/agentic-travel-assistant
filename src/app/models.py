@@ -1,4 +1,4 @@
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -108,7 +108,7 @@ class ClarificationResponse(BaseModel):
     )
 
 
-PlannerResponse = Union[PlanResponse, ClarificationResponse]
+PlannerResponse = PlanResponse | ClarificationResponse
 
 
 class StepExecution(BaseModel):
@@ -154,9 +154,7 @@ class CapabilityFailure(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-CapabilityResult = Union[
-    CapabilitySuccess, CapabilityNeedsInformation, CapabilityFailure
-]
+CapabilityResult = CapabilitySuccess | CapabilityNeedsInformation | CapabilityFailure
 
 
 class ResponseSynthesisInput(BaseModel):

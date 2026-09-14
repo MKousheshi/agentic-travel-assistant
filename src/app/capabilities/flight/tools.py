@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from app.capabilities.flight import services
@@ -89,6 +90,9 @@ def get_flights(
             "flight": flight.model_dump(),
             "message": f"Flight {flight_id} retrieved successfully.",
         }
+
+    if flight_no is None:
+        raise ValueError("Must provide either 'flight_id' or 'flight_no'.")
 
     flights = services.get_flights_by_flight_no(
         session,
@@ -266,7 +270,7 @@ def analyze_flight_schedules(
         )
 
     try:
-        analysis = services.get_flight_status(
+        analysis = services.analyze_actual_times_by_status(
             session=session,
             limit=limit,
             offset=offset,
@@ -276,7 +280,7 @@ def analyze_flight_schedules(
             "analysis": _make_json_serializable(analysis),
             "message": "Flight schedule analysis completed successfully.",
         }
-    except Exception as exc:
+    except (ValueError, SQLAlchemyError) as exc:
         return {
             "success": False,
             "analysis": None,
@@ -351,6 +355,9 @@ def get_aircraft_for_flight(
             "message": f"Aircraft for flight {flight_id} retrieved successfully.",
         }
 
+    if aircraft_code is None:
+        raise ValueError("Must provide either 'flight_id' or 'aircraft_code'.")
+
     flights = services.get_flights_by_aircraft_code(
         session,
         aircraft_code=aircraft_code,
@@ -415,7 +422,7 @@ def analyze_high_traffic_routes(
             "data": _make_json_serializable(report),
             "message": "High-traffic routes and revenue analyzed successfully.",
         }
-    except Exception as exc:
+    except (ValueError, SQLAlchemyError) as exc:
         return {
             "success": False,
             "data": None,

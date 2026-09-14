@@ -4,9 +4,11 @@ from langchain_core.tools import tool
 from langgraph.graph.state import RunnableConfig
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from app.capabilities.ticket import services
+from app.capabilities.ticket.services import TicketDeletionError
 from app.models import Confirmation
 
 
@@ -243,7 +245,7 @@ def delete_ticket_with_dependency_check(
                 ),
             }
 
-    except Exception as exc:
+    except (ValueError, SQLAlchemyError) as exc:
         return {
             "success": False,
             "deleted": False,
@@ -264,7 +266,7 @@ def delete_ticket_with_dependency_check(
                 "message": f"Ticket '{ticket_no}' and its flight segments deleted successfully.",
             }
 
-        except Exception as exc:
+        except (ValueError, TicketDeletionError, SQLAlchemyError) as exc:
             return {
                 "success": False,
                 "deleted": False,

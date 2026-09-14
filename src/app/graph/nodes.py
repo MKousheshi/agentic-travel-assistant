@@ -19,6 +19,10 @@ from app.prompts.synthesizer import SYNTHESIZER_PROMPT
 from app.registry import registry
 
 
+class MissingPlanError(RuntimeError):
+    """Raised when a graph node that requires a plan is reached without one."""
+
+
 @traceable
 def route_from_start(state: WorkflowState) -> Literal["execution", "planning"]:
     execution = state.get("execution")
@@ -74,12 +78,13 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
     errors = []
     if not plan.steps:
         errors.append("plan is empty, no steps found.")
-    ids = {}
+    ids: set[int] = set()
     for step in plan.steps:
         if step.step_id in ids:
             errors.append(
                 f"error in step with step_id {step.step_id}! step_id is not unique in the plan!"
             )
+        ids.add(step.step_id)
         if not registry.has(step.capability_id):
             errors.append(
                 f"error in step with step_id {step.step_id}! capability id: {step.capability_id} does not exist."
@@ -111,7 +116,7 @@ def validate_plan_by_llm(state: WorkflowState) -> dict:
     plan = state.get("plan", None)
     retries = state.get("retries", 0)
     if not plan:
-        raise Exception()
+        raise MissingPlanError("validate_plan_by_llm reached with no plan in state")
     messages.append(HumanMessage(content=f"Plan: {plan.model_dump_json()}"))
 
     result = eval_agent.invoke(InputAgentState(messages=messages))
@@ -140,12 +145,10 @@ def execution_router(
         return "exit"
     if execution.status == "running":
         return "execution"
-    if execution.status == "completed":
-        if session:
-            session.commit()
-    if execution.status == "failed":
-        if session:
-            session.rollback()
+    if execution.status == "completed" and session:
+        session.commit()
+    if execution.status == "failed" and session:
+        session.rollback()
     return "synth"
 
 

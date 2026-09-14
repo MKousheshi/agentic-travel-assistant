@@ -1,11 +1,11 @@
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlalchemy.orm import QueryableAttribute, selectinload
+from sqlmodel import Session, col, select
 
 from app.db.schemas import (
     Aircraft,
@@ -41,9 +41,9 @@ def _validate_pagination(limit: int, offset: int) -> None:
 def _flight_load_options() -> tuple:
     """Eager-load airports and aircraft for flight queries."""
     return (
-        selectinload(Flight.departure_airport_rel),
-        selectinload(Flight.arrival_airport_rel),
-        selectinload(Flight.aircraft),
+        selectinload(cast(QueryableAttribute, Flight.departure_airport_rel)),
+        selectinload(cast(QueryableAttribute, Flight.arrival_airport_rel)),
+        selectinload(cast(QueryableAttribute, Flight.aircraft)),
     )
 
 
@@ -95,7 +95,7 @@ def get_flights_by_flight_no(
     statement = (
         select(Flight)
         .where(Flight.flight_no == flight_no)
-        .order_by(Flight.scheduled_departure)
+        .order_by(col(Flight.scheduled_departure))
         .offset(offset)
         .limit(limit)
         .options(*_flight_load_options())
@@ -117,8 +117,8 @@ def find_flights_between_airports(
     _validate_pagination(limit, offset)
 
     conditions = [
-        Flight.departure_airport == departure_airport,
-        Flight.arrival_airport == arrival_airport,
+        col(Flight.departure_airport) == departure_airport,
+        col(Flight.arrival_airport) == arrival_airport,
     ]
 
     if scheduled_date is not None:
@@ -127,14 +127,14 @@ def find_flights_between_airports(
         )
 
     if status is not None:
-        conditions.append(Flight.status == status)
+        conditions.append(col(Flight.status) == status)
 
     statement = (
         select(Flight)
         .where(*conditions)
         .order_by(
-            Flight.scheduled_departure,
-            Flight.flight_id,
+            col(Flight.scheduled_departure),
+            col(Flight.flight_id),
         )
         .offset(offset)
         .limit(limit)
@@ -198,12 +198,14 @@ def analyze_actual_times_by_status(
         select(func.count(func.distinct(Flight.status))).select_from(Flight)
     ).one()
 
+    # select()'s typed overloads only cover up to ~4 mixed columns; valid at
+    # runtime, but no overload matches this many.
     rows = session.exec(
-        select(
-            Flight.status,
+        select(  # type: ignore[call-overload]  # pyright: ignore[reportCallIssue]
+            col(Flight.status).label("status"),
             func.count().label("flight_count"),
-            func.count(Flight.actual_departure).label("with_actual_departure"),
-            func.count(Flight.actual_arrival).label("with_actual_arrival"),
+            func.count(col(Flight.actual_departure)).label("with_actual_departure"),
+            func.count(col(Flight.actual_arrival)).label("with_actual_arrival"),
             func.avg(
                 (
                     func.julianday(Flight.actual_departure)
@@ -219,8 +221,8 @@ def analyze_actual_times_by_status(
                 * 86400.0
             ).label("avg_arrival_delay_seconds"),
         )
-        .group_by(Flight.status)
-        .order_by(Flight.status)
+        .group_by(col(Flight.status))
+        .order_by(col(Flight.status))
         .offset(offset)
         .limit(limit)
     ).all()
@@ -284,7 +286,7 @@ def get_flights_by_aircraft_code(
     statement = (
         select(Flight)
         .where(Flight.aircraft_code == aircraft_code)
-        .order_by(Flight.scheduled_departure)
+        .order_by(col(Flight.scheduled_departure))
         .offset(offset)
         .limit(limit)
         .options(*_flight_load_options())
@@ -306,16 +308,18 @@ def analyze_high_traffic_routes(
     )
     total_routes = session.exec(select(func.count()).select_from(distinct_routes)).one()
 
+    # select()'s typed overloads only cover up to ~4 mixed columns; valid at
+    # runtime, but no overload matches this many.
     rows = session.exec(
-        select(
-            Flight.departure_airport,
-            Flight.arrival_airport,
+        select(  # type: ignore[call-overload]  # pyright: ignore[reportCallIssue]
+            col(Flight.departure_airport).label("departure_airport"),
+            col(Flight.arrival_airport).label("arrival_airport"),
             func.count(func.distinct(Flight.flight_id)).label("flight_count"),
-            func.count(TicketFlight.ticket_no).label("ticket_count"),
+            func.count(col(TicketFlight.ticket_no)).label("ticket_count"),
             func.coalesce(func.sum(TicketFlight.amount), 0).label("total_revenue"),
         )
         .outerjoin(TicketFlight, TicketFlight.flight_id == Flight.flight_id)
-        .group_by(Flight.departure_airport, Flight.arrival_airport)
+        .group_by(col(Flight.departure_airport), col(Flight.arrival_airport))
         .order_by(
             func.count(func.distinct(Flight.flight_id)).desc(),
             func.coalesce(func.sum(TicketFlight.amount), 0).desc(),
@@ -333,7 +337,7 @@ def analyze_high_traffic_routes(
         airports = {
             airport.airport_code: airport
             for airport in session.exec(
-                select(Airport).where(Airport.airport_code.in_(airport_codes))
+                select(Airport).where(col(Airport.airport_code).in_(airport_codes))
             ).all()
         }
 

@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langgraph.graph.state import RunnableConfig
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from app.capabilities.booking import services
@@ -243,7 +244,7 @@ def create_booking(
             "message": "Booking created successfully",
             "booking": booking.model_dump(),
         }
-    except Exception as e:
+    except (ValueError, SQLAlchemyError) as e:
         return {
             "message": f"Failed to create booking: {e!s}",
             "booking": None,
@@ -295,7 +296,7 @@ def delete_booking_with_dependency_check(
             session,
             book_ref=book_ref,
         )
-    except Exception as e:
+    except (ValueError, SQLAlchemyError) as e:
         return {
             "success": False,
             "retryable": False,

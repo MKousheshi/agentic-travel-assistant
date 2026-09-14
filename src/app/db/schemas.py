@@ -35,8 +35,11 @@ class SafeDateTime(TypeDecorator[datetime | None]):
         if value is None:
             return None
 
-        if isinstance(value, (datetime, date)):
+        if isinstance(value, datetime):
             return value.isoformat(sep=" ")
+
+        if isinstance(value, date):
+            return value.isoformat()
 
         if isinstance(value, str):
             if value in {"", r"\N"}:
@@ -69,14 +72,14 @@ class SafeDateTime(TypeDecorator[datetime | None]):
 
         # Handle common SQLite datetime formats
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return datetime.fromisoformat(value)
         except ValueError:
             # Optional: do not hide unexpected corrupted values silently
             raise ValueError(f"Invalid datetime value in database: {value!r}") from None
 
 
 class Aircraft(SQLModel, table=True):
-    __tablename__ = "aircrafts_data"  # type: ignore
+    __tablename__ = "aircrafts_data"  # pyright: ignore[reportAssignmentType]
     __table_args__ = (CheckConstraint("range > 0", name="aircrafts_range_check"),)
 
     aircraft_code: str = Field(primary_key=True, max_length=3)
@@ -88,7 +91,7 @@ class Aircraft(SQLModel, table=True):
 
 
 class Airport(SQLModel, table=True):
-    __tablename__ = "airports_data"  # type: ignore
+    __tablename__ = "airports_data"  # pyright: ignore[reportAssignmentType]
 
     airport_code: str = Field(primary_key=True, max_length=3)
     airport_name: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
@@ -107,7 +110,7 @@ class Airport(SQLModel, table=True):
 
 
 class Booking(SQLModel, table=True):
-    __tablename__ = "bookings"  # type: ignore
+    __tablename__ = "bookings"  # pyright: ignore[reportAssignmentType]
 
     book_ref: str = Field(primary_key=True, max_length=6)
     book_date: datetime = Field(nullable=False)
@@ -117,7 +120,7 @@ class Booking(SQLModel, table=True):
 
 
 class Ticket(SQLModel, table=True):
-    __tablename__ = "tickets"  # type: ignore
+    __tablename__ = "tickets"  # pyright: ignore[reportAssignmentType]
 
     ticket_no: str = Field(primary_key=True, max_length=13)
     book_ref: str = Field(foreign_key="bookings.book_ref", max_length=6, nullable=False)
@@ -129,7 +132,7 @@ class Ticket(SQLModel, table=True):
 
 
 class Flight(SQLModel, table=True):
-    __tablename__ = "flights"  # type: ignore
+    __tablename__ = "flights"  # pyright: ignore[reportAssignmentType]
 
     flight_id: int = Field(primary_key=True)
 
@@ -171,7 +174,7 @@ class Flight(SQLModel, table=True):
 
 
 class Seat(SQLModel, table=True):
-    __tablename__ = "seats"  # type: ignore
+    __tablename__ = "seats"  # pyright: ignore[reportAssignmentType]
 
     aircraft_code: str = Field(
         foreign_key="aircrafts_data.aircraft_code",
@@ -185,7 +188,7 @@ class Seat(SQLModel, table=True):
 
 
 class TicketFlight(SQLModel, table=True):
-    __tablename__ = "ticket_flights"  # type: ignore
+    __tablename__ = "ticket_flights"  # pyright: ignore[reportAssignmentType]
 
     ticket_no: str = Field(
         foreign_key="tickets.ticket_no",
@@ -201,7 +204,7 @@ class TicketFlight(SQLModel, table=True):
 
 
 class BoardingPass(SQLModel, table=True):
-    __tablename__ = "boarding_passes"  # type: ignore
+    __tablename__ = "boarding_passes"  # pyright: ignore[reportAssignmentType]
 
     ticket_no: str = Field(
         foreign_key="tickets.ticket_no",
