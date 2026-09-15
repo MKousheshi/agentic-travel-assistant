@@ -9,6 +9,15 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
+skip_pip_audit=0
+for arg in "$@"; do
+    case "$arg" in
+        --skip-audit)
+            skip_pip_audit=1
+            ;;
+    esac
+done
+
 declare -a STEP_NAMES=()
 declare -a STEP_STATUS=()
 
@@ -63,25 +72,31 @@ record "bandit" $?
 
 echo
 echo "== 6/7: pip-audit =="
-# --vulnerability-service osv: pip-audit's default "pypi" service lags OSV
-# for freshly-published advisories (verified during this pipeline's build:
-# it missed a then-current CRITICAL chainlit CVE that OSV already had). The
-# reachability probe below therefore checks OSV's own API host, not PyPI,
-# and uses bash's /dev/tcp instead of curl so a missing `curl` binary can't
-# make this silently SKIP.
-if (exec 3<>"/dev/tcp/api.osv.dev/443") 2>/dev/null; then
-    exec 3>&- 3<&-
-    tmp_requirements=$(mktemp)
-    trap 'rm -f "$tmp_requirements"' EXIT
-    if uv export --frozen --all-groups --no-emit-project --format requirements.txt -o "$tmp_requirements" >/dev/null; then  uv run --locked pip-audit --disable-pip --no-deps --vulnerability-service osv -r "$tmp_requirements"
-        record "pip-audit" $?
-    else
-        echo "uv export failed; cannot run pip-audit" >&2
-        record "pip-audit" 1
-    fi
-else
-    echo "SKIP (api.osv.dev unreachable)"
+if [ "$skip_pip_audit" = "1" ]; then
+    echo "SKIP (--skip-audit)"
     record "pip-audit" "SKIP"
+else
+    # --vulnerability-service osv: pip-audit's default "pypi" service lags OSV
+    # for freshly-published advisories (verified during this pipeline's build:
+    # it missed a then-current CRITICAL chainlit CVE that OSV already had). The
+    # reachability probe below therefore checks OSV's own API host, not PyPI,
+    # and uses bash's /dev/tcp instead of curl so a missing `curl` binary can't
+    # make this silently SKIP.
+    if (exec 3<>"/dev/tcp/api.osv.dev/443") 2>/dev/null; then
+        exec 3>&- 3<&-
+        tmp_requirements=$(mktemp)
+        trap 'rm -f "$tmp_requirements"' EXIT
+        if uv export --frozen --all-groups --no-emit-project --format requirements.txt -o "$tmp_requirements" >/dev/null; then
+            uv run --locked pip-audit --disable-pip --no-deps --vulnerability-service osv -r "$tmp_requirements"
+            record "pip-audit" $?
+        else
+            echo "uv export failed; cannot run pip-audit" >&2
+            record "pip-audit" 1
+        fi
+    else
+        echo "SKIP (api.osv.dev unreachable)"
+        record "pip-audit" "SKIP"
+    fi
 fi
 
 echo

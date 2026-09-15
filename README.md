@@ -72,6 +72,8 @@ app/
 
 ![Architecture Diagram](/workflow.png)
 
+Regenerate this image after a graph change with `uv run python scripts/generate_workflow_png.py` (needs `.env`; it renders via the mermaid.ink API and never calls the LLM).
+
 ## Agent / Tool / Service Boundaries
 
 The system separates orchestration from domain-specific business logic.
@@ -138,9 +140,9 @@ The overall workflow state is represented using a typed dictionary:
 ```python
 class WorkflowState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
-    plan: ExecutionPlan
-    feedback: Feedback
-    execution: ExecutionState
+    plan: ExecutionPlan | None
+    feedback: Feedback | None
+    execution: ExecutionState | None
     user_message: str
     retries: int
 ```
@@ -151,8 +153,10 @@ Key state fields include:
 - `plan`: The generated execution plan.
 - `feedback`: Evaluator feedback for invalid plans.
 - `execution`: Current execution status, progress, results, and pending user question.
-- `user_message`: The original user request.
+- `user_message`: The final user-facing reply for the current run.
 - `retries`: Number of planning/evaluation retries performed.
+
+`plan`, `feedback`, `execution`, and `retries` are run-scoped: the `exit` node clears them back to `None`/`0` at the end of every run, except while `execution.status == "waiting_for_user"`, when the paused run's plan and progress are kept for the next turn.
 
 ## Planning Strategy
 
@@ -165,7 +169,7 @@ Planning follows a **generator-evaluator pattern**.
 5. If it passes structural validation, it is sent to the LLM evaluator for semantic validation.
 6. If evaluation fails, feedback is passed back to the planner for regeneration.
 7. The system retries plan generation and evaluation up to three times.
-8. If no valid plan is produced after the retry limit, the workflow exits with an error.
+8. If no valid plan is produced after the retry limit, the workflow sends the user a message asking them to rephrase or split up the request, instead of executing anything.
 
 A valid plan must satisfy both structural and semantic requirements:
 
@@ -232,7 +236,7 @@ This mechanism is used especially for risky operations, where users are informed
 The planner may retry plan generation when the generated plan fails either the rule-based evaluator or the LLM evaluator.
 
 - Maximum evaluation retries: **3**
-- After three unsuccessful attempts, the workflow produces an error and exits.
+- After three unsuccessful attempts, the workflow answers with a fixed message asking the user to rephrase or split up the request.
 
 ### Execution failures
 

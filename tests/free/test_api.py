@@ -56,6 +56,7 @@ def build_fake_graph():
 class FakeSession:
     def __init__(self) -> None:
         self.closed = False
+        self.commit_called = False
         self.rollback_called = False
         self._in_transaction = False
 
@@ -67,6 +68,7 @@ class FakeSession:
 
     def commit(self) -> None:
         self._in_transaction = False
+        self.commit_called = True
 
     def rollback(self) -> None:
         self._in_transaction = False

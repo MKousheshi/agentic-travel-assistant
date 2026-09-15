@@ -12,10 +12,11 @@ uv run api         # run the backend (FastAPI + SSE, auto-reload, port 8000)
 uv run ui          # run the UI (thin Chainlit HTTP client, auto-reload, port 8001)
 
 ./scripts/verify.sh                            # full pipeline: format, lint, pyright, mypy, bandit, pip-audit, free tests
+./scripts/verify.sh --skip-audit               # same, but skips the slow pip-audit network step (see Verification below for when to use this)
 ./scripts/test-paid.sh                         # human-only: runs tests/paid against the real LLM, see Verification below
 
-uv run ruff check src tests                    # lint
-uv run ruff format src tests                   # format
+uv run ruff check src tests scripts            # lint
+uv run ruff format src tests scripts           # format
 uv run pyright                                 # type check
 uv run mypy                                    # type check (second checker; see Verification below)
 
@@ -24,6 +25,8 @@ uv run pytest tests/free/test_x.py::test_name       # single test
 
 docker compose up --build                                                       # prod-style: both services in containers, no reload
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build       # dev override: bind-mounts ./src, auto-reload
+
+uv run python scripts/generate_workflow_png.py    # regenerate workflow.png from the current graph (needs .env; only calls mermaid.ink, not the LLM)
 ```
 
 - The app is split into two processes: a FastAPI backend (`src/app/api/`) that owns the graph, the checkpointer, and the DB session, and a Chainlit UI (`src/app/ui/chainlit_app.py`) that is a pure HTTP/SSE client of it. Run both; the UI reads the backend's base URL from `API_BASE_URL` (default `http://localhost:8000`). `uv run api` and `uv run ui` are `[project.scripts]` entry points (`src/app/scripts.py`) that just `exec` the equivalent `uvicorn`/`chainlit` CLI invocations — the UI is pinned to port 8001 because Chainlit's own default (8000) collides with the API's.
@@ -35,7 +38,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build       
 
 ## Verification
 
-After implementing a change that modifies the codebase, run `./scripts/verify.sh` and fix any failures your change introduced; the baseline numbers above tell you what was already failing before you touched anything. Review the files `ruff format`/`ruff check --fix` touched (the script lists them). Don't loosen tool config, add blanket ignores, or edit the guard files (`scripts/verify.sh`, `scripts/test-paid.sh`, `tests/free/conftest.py`, `tests/paid/conftest.py`, `.claude/settings.local.json`) to make the pipeline pass — file-permission rules block editing them anyway. Report the script's final summary table to the user.
+After implementing a change that modifies the codebase, run `./scripts/verify.sh --skip-audit` and fix any failures your change introduced; the baseline numbers above tell you what was already failing before you touched anything. Review the files `ruff format`/`ruff check --fix` touched (the script lists them). Don't loosen tool config, add blanket ignores, or edit the guard files (`scripts/verify.sh`, `scripts/test-paid.sh`, `tests/free/conftest.py`, `tests/paid/conftest.py`, `.claude/settings.local.json`) to make the pipeline pass — file-permission rules block editing them anyway. Report the script's final summary table to the user.
+
+`pip-audit` makes network calls to OSV for every dependency and is the slowest step, so default to `--skip-audit` on routine verification passes. Run the full `./scripts/verify.sh` (no flag) instead when `pyproject.toml` or `uv.lock` changed, before a final hand-off, or whenever the user asks for a full check.
 
 **Never run the app end-to-end against the real LLM to "verify" a change, and never drive it through a browser.** Starting `uvicorn`/`chainlit` and sending prompts through them burns the user's real `OPENAI_API_KEY` quota. `./scripts/verify.sh` is the verification budget for automated changes. This includes the Docker setup: bringing containers up with `docker compose up` (or the dev override) and checking `docker compose ps`, `/health`, logs, etc. is fine, but never `POST` to `/threads/{thread_id}/stream`, send a chat prompt, or open the Chainlit UI in a browser through the containers either.
 
@@ -52,10 +57,10 @@ A LangGraph workflow that turns a user's travel request into a validated plan an
 `START` → `route_from_start` picks `execution` if `state["execution"]` exists (the user is resuming a paused run), otherwise `planning`.
 
 1. **planning** (`create_plan`): the planner agent returns a `PlannerResponse` union. Either it's a `PlanResponse` (an `ExecutionPlan` of `PlanStep`s, each naming a `capability_id`) or a `ClarificationResponse`, which sets `plan=None` and goes to `exit` so the user can answer.
-2. **verify-rules** (deterministic: non-empty plan, unique `step_id`, capability exists in the registry), then **verify-llm** (semantic `Feedback` from the evaluator agent). Failure sends the feedback back to `planning`. `retries` is capped by `max_planning_retries` (default 3), after which the graph exits.
+2. **verify-rules** (deterministic: non-empty plan, unique `step_id`, capability exists in the registry), then **verify-llm** (semantic `Feedback` from the evaluator agent). Failure sends the feedback back to `planning`, as a single labelled `HumanMessage` containing the rejected plan and the feedback — the planner only ever sees this inside a run's retry loop, never as a standing instruction across turns. `retries` is capped by `max_planning_retries` (default 3), after which the graph routes to **planning-failed**, which sends the user a static "couldn't build a plan" message, then goes to `exit`.
 3. **execution-init** calls `session.begin()` and creates a fresh `ExecutionState`.
-4. **execution** runs one plan step per pass. It calls the capability with the conversation plus all earlier `StepResult`s and maps the `CapabilityResult` status (`success` / `failure` / `needs_information`) onto `ExecutionState.status`. `execution_router` loops back while the status is `running`. When the run ends, the router **commits on `completed` or rolls back on `failed`**, then goes to `synth`.
-5. **synth** turns the results into a final answer with the synthesizer model, or passes through the failure or pending question. **exit** clears `execution` on completed/failed and keeps it on `waiting_for_user`.
+4. **execution** runs one plan step per pass. It calls the capability with the conversation plus all earlier `StepResult`s and maps the `CapabilityResult` status (`success` / `failure` / `needs_information`) onto `ExecutionState.status`, resetting `status` to `running` and clearing `pending_question` before applying that step's outcome — this is what lets a plan resumed after `needs_information` continue into its remaining steps instead of re-showing the old question. `execution_router` loops back while the status is `running`. When the run ends, the router **commits on `completed` or rolls back on `failed`**, then goes to `synth`.
+5. **synth** turns the results into a final answer with the synthesizer model, or passes through the failure or pending question. **exit** is the one place run-scoped state is cleared: it clears `execution`, `plan`, `feedback`, and resets `retries` to `0` whenever the run ended (completed, failed, clarification, or planning-failed), but leaves all four untouched while `execution.status == "waiting_for_user"`, since a paused run still needs its plan and progress on the next turn.
 
 Whatever a node writes to `user_message` is streamed as the SSE `message` event and shown as the final Chainlit message. Every other node output is streamed as an SSE `node` event; the UI renders each as an intermediate `cl.Step`, **except `synth` and `exit`** (see `_HIDDEN_STEP_NODES` in `chainlit_app.py`). `synth` streams its output live as `token` events before its own `node` event can fire (a node's `updates` chunk is only emitted once the node function returns, i.e. after the LLM call — and hence all its tokens — has finished), so by the time `node("synth")` and the always-trivial `node("exit")` arrive, the answer message already exists and their steps would render trailing after it instead of before. The backend still emits both faithfully; only this UI chooses not to render them.
 

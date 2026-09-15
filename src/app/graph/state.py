@@ -21,8 +21,8 @@ class ExecutionState(BaseModel):
 
 class WorkflowState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
-    plan: ExecutionPlan
-    feedback: Feedback
-    execution: ExecutionState
+    plan: ExecutionPlan | None
+    feedback: Feedback | None
+    execution: ExecutionState | None
     user_message: str
     retries: int

@@ -23,6 +23,12 @@ class MissingPlanError(RuntimeError):
     """Raised when a graph node that requires a plan is reached without one."""
 
 
+PLANNING_FAILED_MESSAGE = (
+    "I couldn't put together a reliable plan for that request. Could you "
+    "rephrase it or split it into smaller parts?"
+)
+
+
 @traceable
 def route_from_start(state: WorkflowState) -> Literal["execution", "planning"]:
     execution = state.get("execution")
@@ -37,14 +43,19 @@ def create_plan(state: WorkflowState) -> dict:
     previous_plan = state.get("plan", None)
     feedback = state.get("feedback", None)
     retries = state.get("retries", 0)
-    if retries >= get_settings().max_planning_retries:
-        retries = 0
-    if previous_plan:
+    if previous_plan and feedback and feedback.validated is False:
         messages.append(
-            AIMessage(content=f"Previous plan: {previous_plan.model_dump_json()}")
+            HumanMessage(
+                content=(
+                    "[Plan validator feedback: internal, not written by the "
+                    "user]\n"
+                    "The plan you proposed for the latest user request was "
+                    "rejected.\n"
+                    f"Rejected plan: {previous_plan.model_dump_json()}\n"
+                    f"Problems to fix: {feedback.message}"
+                )
+            )
         )
-    if feedback:
-        messages.append(HumanMessage(content=f"Feedback: {feedback}"))
 
     result = planner_agent.invoke(InputAgentState(messages=messages))
     response: PlannerResponse = result["structured_response"]
@@ -74,7 +85,7 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
     plan = state.get("plan", None)
     retries = state.get("retries", 0)
     if not plan:
-        return {}
+        raise MissingPlanError("validate_plan_by_rules reached with no plan in state")
     errors = []
     if not plan.steps:
         errors.append("plan is empty, no steps found.")
@@ -98,15 +109,19 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
 
 
 @traceable
-def route_after_validation(state: WorkflowState) -> Literal["exit", "next", "planning"]:
+def route_after_validation(
+    state: WorkflowState,
+) -> Literal["planning-failed", "next", "planning"]:
     feedback = state.get("feedback", None)
     retries = state.get("retries", 0)
     if not feedback:
-        return "exit"
+        raise MissingPlanError(
+            "route_after_validation reached with no feedback in state"
+        )
     if feedback.validated:
         return "next"
     if retries >= get_settings().max_planning_retries:
-        return "exit"
+        return "planning-failed"
     return "planning"
 
 
@@ -136,13 +151,15 @@ def execution_init(state: WorkflowState, config: RunnableConfig) -> dict:
 @traceable
 def execution_router(
     state: WorkflowState, config: RunnableConfig
-) -> Literal["exit", "execution", "synth"]:
+) -> Literal["execution", "synth"]:
     execution = state.get("execution", None)
     session = config.get("configurable", {}).get("session", None)
 
     plan = state.get("plan", None)
     if not plan or not execution:
-        return "exit"
+        raise MissingPlanError(
+            "execution_router reached with no plan/execution in state"
+        )
     if execution.status == "running":
         return "execution"
     if execution.status == "completed" and session:
@@ -157,7 +174,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     execution = state.get("execution", None)
     plan = state.get("plan", None)
     if not plan or not execution:
-        return {}
+        raise MissingPlanError("execute_plan reached with no plan/execution in state")
     print("execution", execution.current_step_index)
     step = plan.steps[execution.current_step_index]
     capability = registry.get(step.capability_id)
@@ -171,7 +188,9 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
         },
         config,
     )
-    next_exec_state = execution.model_copy()
+    next_exec_state = execution.model_copy(
+        deep=True, update={"status": "running", "pending_question": None}
+    )
     match result.status:
         case "success":
             next_exec_state.results.append(
@@ -196,7 +215,7 @@ def synthesize(state: WorkflowState) -> dict:
     plan = state.get("plan")
 
     if not execution or not plan:
-        return {}
+        raise MissingPlanError("synthesize reached with no plan/execution in state")
     match execution.status:
         case "completed":
             response = synthesizer_model.invoke(
@@ -225,19 +244,22 @@ def synthesize(state: WorkflowState) -> dict:
                 "messages": [AIMessage(execution.pending_question)],
             }
         case _:
-            return {}
+            raise MissingPlanError(
+                f"synthesize reached with unexpected execution status {execution.status!r}"
+            )
+
+
+@traceable
+def planning_failed(state: WorkflowState) -> dict:
+    return {
+        "user_message": PLANNING_FAILED_MESSAGE,
+        "messages": [AIMessage(PLANNING_FAILED_MESSAGE)],
+    }
 
 
 @traceable
 def exit(state: WorkflowState) -> dict:
     execution = state.get("execution")
-    if execution:
-        match execution.status:
-            case "completed":
-                return {"execution": None}
-            case "failed":
-                return {"execution": None}
-            case "waiting_for_user":
-                return {}
-
-    return {}
+    if execution and execution.status == "waiting_for_user":
+        return {}
+    return {"execution": None, "plan": None, "feedback": None, "retries": 0}
