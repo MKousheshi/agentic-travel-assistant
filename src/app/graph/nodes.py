@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Literal
 
 from langchain.agents.middleware.types import InputAgentState
@@ -5,7 +6,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemM
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 
-from app.agents import eval_agent, planner_agent, synthesizer_model
+from app.agents import get_eval_agent, get_planner_agent, get_synthesizer_model
 from app.config import get_settings
 from app.graph.state import ExecutionState, WorkflowState
 from app.models import (
@@ -18,6 +19,8 @@ from app.models import (
 from app.prompts.synthesizer import SYNTHESIZER_PROMPT
 from app.registry import registry
 
+logger = logging.getLogger(__name__)
+
 
 class MissingPlanError(RuntimeError):
     """Raised when a graph node that requires a plan is reached without one."""
@@ -29,7 +32,6 @@ PLANNING_FAILED_MESSAGE = (
 )
 
 
-@traceable
 def route_from_start(state: WorkflowState) -> Literal["execution", "planning"]:
     execution = state.get("execution")
     if execution:
@@ -57,7 +59,7 @@ def create_plan(state: WorkflowState) -> dict:
             )
         )
 
-    result = planner_agent.invoke(InputAgentState(messages=messages))
+    result = get_planner_agent().invoke(InputAgentState(messages=messages))
     response: PlannerResponse = result["structured_response"]
     match response:
         case PlanResponse(kind="plan", response=plan):
@@ -72,7 +74,6 @@ def create_plan(state: WorkflowState) -> dict:
             }
 
 
-@traceable
 def route_after_plan(state: WorkflowState) -> Literal["exit", "verify-rules"]:
     plan = state.get("plan", None)
     if not plan:
@@ -108,7 +109,6 @@ def validate_plan_by_rules(state: WorkflowState) -> dict:
     return {"feedback": Feedback(validated=True, message="")}
 
 
-@traceable
 def route_after_validation(
     state: WorkflowState,
 ) -> Literal["planning-failed", "next", "planning"]:
@@ -134,7 +134,7 @@ def validate_plan_by_llm(state: WorkflowState) -> dict:
         raise MissingPlanError("validate_plan_by_llm reached with no plan in state")
     messages.append(HumanMessage(content=f"Plan: {plan.model_dump_json()}"))
 
-    result = eval_agent.invoke(InputAgentState(messages=messages))
+    result = get_eval_agent().invoke(InputAgentState(messages=messages))
     response: Feedback = result["structured_response"]
     return {"feedback": response, "retries": 0 if response.validated else retries + 1}
 
@@ -148,7 +148,6 @@ def execution_init(state: WorkflowState, config: RunnableConfig) -> dict:
     return {"execution": exec_state}
 
 
-@traceable
 def execution_router(
     state: WorkflowState, config: RunnableConfig
 ) -> Literal["execution", "synth"]:
@@ -175,7 +174,7 @@ def execute_plan(state: WorkflowState, config: RunnableConfig) -> dict:
     plan = state.get("plan", None)
     if not plan or not execution:
         raise MissingPlanError("execute_plan reached with no plan/execution in state")
-    print("execution", execution.current_step_index)
+    logger.debug("Executing plan step %s", execution.current_step_index)
     step = plan.steps[execution.current_step_index]
     capability = registry.get(step.capability_id)
     if not capability:
@@ -218,7 +217,7 @@ def synthesize(state: WorkflowState) -> dict:
         raise MissingPlanError("synthesize reached with no plan/execution in state")
     match execution.status:
         case "completed":
-            response = synthesizer_model.invoke(
+            response = get_synthesizer_model().invoke(
                 [
                     SystemMessage(
                         SYNTHESIZER_PROMPT.format(

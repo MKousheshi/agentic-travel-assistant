@@ -59,6 +59,3 @@ def build_graph(checkpointer=None):
     workflow.add_edge("exit", END)
 
     return workflow.compile(checkpointer)
-
-
-graph = build_graph()

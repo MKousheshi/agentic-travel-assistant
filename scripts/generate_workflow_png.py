@@ -8,17 +8,13 @@ backend), so it needs network access; it does not call the LLM.
 
 import pathlib
 
-from app.registry import load_capabilities
-
-load_capabilities()
-
-from app.graph.build_graph import build_graph  # must follow load_capabilities
+from app.graph.studio import make_graph
 
 OUTPUT_PATH = pathlib.Path(__file__).resolve().parent.parent / "workflow.png"
 
 
 def main() -> None:
-    graph = build_graph()
+    graph = make_graph()
     png_bytes = graph.get_graph().draw_mermaid_png()
     OUTPUT_PATH.write_bytes(png_bytes)
     print(f"Wrote {OUTPUT_PATH}")

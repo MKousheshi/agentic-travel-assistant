@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,10 +10,12 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
 
 from app.capabilities.airport.tools import airport_tools
-from app.chat_models import capability_model
+from app.chat_models import get_chat_model
 from app.models import CapabilityFailure, CapabilityResult, PlanStep
 from app.prompts.capability import CAPABILITY_PROMPT
 from app.registry import register_capability
+
+logger = logging.getLogger(__name__)
 
 
 @register_capability(
@@ -22,7 +25,6 @@ from app.registry import register_capability
         "- Search for an airport based on city\n"
         "- Display airport_name, city, coordinates, and timezone\n"
         "- Find incoming and outgoing flights of an airport\n"
-        "- Resolve the destination/origin city or location for Weather capability\n"
     ),
 )
 def airport_capability(
@@ -31,7 +33,7 @@ def airport_capability(
     messages: list[AnyMessage | dict[str, Any]] = state.get("messages", [])
     config = config | {"recursion_limit": 10}
     agent = create_agent(
-        model=capability_model,
+        model=get_chat_model(),
         tools=airport_tools,
         system_prompt=CAPABILITY_PROMPT.format(
             current_date=datetime.now(UTC).date().isoformat(),
@@ -47,5 +49,12 @@ def airport_capability(
         )
         response: CapabilityResult = result["structured_response"]
         return response
-    except GraphRecursionError as e:
-        return CapabilityFailure(message=str(e), reason=str(e), details={})
+    except GraphRecursionError:
+        logger.warning(
+            "Capability 'airport' hit its recursion limit on step %s", step.step_id
+        )
+        return CapabilityFailure(
+            message="This step needed more actions than allowed, so it was stopped.",
+            reason="recursion_limit_exceeded",
+            details={},
+        )

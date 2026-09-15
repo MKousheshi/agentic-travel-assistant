@@ -1,13 +1,16 @@
-from contextlib import contextmanager
+from functools import cache
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 
 from ..config import get_settings
 
-engine = create_engine(
-    f"sqlite:///{get_settings().db_path}",
-    connect_args={"check_same_thread": False},
-)
+
+@cache
+def get_engine() -> Engine:
+    return create_engine(
+        f"sqlite:///{get_settings().db_path}",
+        connect_args={"check_same_thread": False},
+    )
 
 
 # @event.listens_for(Engine, "connect")
@@ -15,9 +18,3 @@ engine = create_engine(
 #     cursor = dbapi_connection.cursor()
 #     cursor.execute("PRAGMA foreign_keys=ON")
 #     cursor.close()
-
-
-@contextmanager
-def get_connection():
-    with engine.connect() as conn:
-        yield conn

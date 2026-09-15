@@ -12,16 +12,16 @@ The system turns ambiguous, multi-step requests (for example, *"find flight PG04
 - **Validation & Config:** Pydantic v2 (structured outputs and plan validation), `pydantic-settings` (`SecretStr` secret handling)
 - **Data & Persistence:** SQLModel / SQLAlchemy 2.0 over SQLite (8 relational tables)
 - **UI:** Chainlit chat application
-- **Observability:** LangSmith tracing (`@traceable` on every graph node)
-- **Tooling:** `uv` for dependency and environment management, LangGraph CLI (`langgraph.json`)
+- **Observability:** LangSmith tracing (`@traceable` on graph nodes), opt-in via `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` in `.env`
+- **Tooling:** `uv` for dependency and environment management, LangGraph CLI (`langgraph.json`, a dev-only dependency)
 
 ## Project Metrics
 
 | Metric                            | Value                                                                                                                                 |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Graph nodes / conditional routers | 7 nodes, 4 routers                                                                                                                    |
+| Graph nodes / conditional routers | 8 nodes, 4 routers                                                                                                                    |
 | Capabilities (sub-agents)         | 5 implemented (`flight`, `booking`, `ticket`, `airport`, `weather`); 4 registered by default                                |
-| Domain tools                      | 25 LangChain tools, each with a dedicated Pydantic`args_schema`                                                                     |
+| Domain tools                      | 24 LangChain tools, each with a dedicated Pydantic`args_schema`                                                                     |
 | Database tables                   | 8 (`aircrafts_data`, `airports_data`, `bookings`, `tickets`, `flights`, `seats`, `ticket_flights`, `boarding_passes`) |
 | Planning retries                  | up to 3 before graceful exit                                                                                                          |
 
@@ -104,7 +104,7 @@ Implemented capabilities include:
 Each capability is an independent package containing its own:
 
 - Service layer
-- Tools (25 LangChain tools total across all capabilities, each with a Pydantic `args_schema`)
+- Tools (24 LangChain tools total across all capabilities, each with a Pydantic `args_schema`)
 - Utilities
 - Domain-specific logic
 

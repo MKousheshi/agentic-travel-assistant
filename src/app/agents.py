@@ -1,31 +1,58 @@
+from functools import cache
+
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
+from langchain_openai import ChatOpenAI
+from langgraph.graph.state import CompiledStateGraph
 
-from app.chat_models import mini_model, plan_model
+from app.chat_models import get_chat_model
 from app.models import Feedback, PlannerResponse
 from app.prompts.planner import PLANNER_SYSTEM_PROMPT
 from app.prompts.validator import VALIDATOR_SYSTEM_PROMPT
 from app.registry import registry
 
-PLANNER_PROMPT = PLANNER_SYSTEM_PROMPT.format(
-    capability_catalog=registry.catalog(),
-    capability_ids=[c.id for c in registry.all()],
-)
 
-planner_agent = create_agent(
-    model=plan_model,
-    system_prompt=PLANNER_PROMPT,
-    response_format=ToolStrategy(PlannerResponse),
-)
+# Cached factories build each agent once, from whatever capabilities are
+# registered at first use. Registration happens once at startup before any
+# agent is built, so a cached agent's catalog never goes stale.
+@cache
+def get_planner_agent() -> CompiledStateGraph:
+    capabilities = registry.all()
+    if not capabilities:
+        raise RuntimeError(
+            "No capabilities are registered; call load_capabilities() before "
+            "building agents."
+        )
+    prompt = PLANNER_SYSTEM_PROMPT.format(
+        capability_catalog=registry.catalog(),
+        capability_ids=[c.id for c in capabilities],
+    )
+    return create_agent(
+        model=get_chat_model(),
+        system_prompt=prompt,
+        response_format=ToolStrategy(PlannerResponse),
+    )
 
-VALIDATOR_PROMPT = VALIDATOR_SYSTEM_PROMPT.format(
-    capability_catalog=registry.catalog(),
-    capability_ids=[c.id for c in registry.all()],
-)
-eval_agent = create_agent(
-    model=plan_model,
-    system_prompt=VALIDATOR_PROMPT,
-    response_format=ToolStrategy(Feedback),
-)
 
-synthesizer_model = mini_model
+@cache
+def get_eval_agent() -> CompiledStateGraph:
+    capabilities = registry.all()
+    if not capabilities:
+        raise RuntimeError(
+            "No capabilities are registered; call load_capabilities() before "
+            "building agents."
+        )
+    prompt = VALIDATOR_SYSTEM_PROMPT.format(
+        capability_catalog=registry.catalog(),
+        capability_ids=[c.id for c in capabilities],
+    )
+    return create_agent(
+        model=get_chat_model(),
+        system_prompt=prompt,
+        response_format=ToolStrategy(Feedback),
+    )
+
+
+@cache
+def get_synthesizer_model() -> ChatOpenAI:
+    return get_chat_model()

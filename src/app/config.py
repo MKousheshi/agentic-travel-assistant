@@ -7,9 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     openai_api_key: SecretStr
     db_path: str
-    langsmith_api_key: SecretStr
     openai_base_url: str
+    langsmith_api_key: SecretStr | None = None
     max_planning_retries: int = 3
+    openai_model: str = "gpt-4o-mini"
+    log_level: str = "INFO"
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

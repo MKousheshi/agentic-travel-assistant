@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.api.routers import health, threads
+from app.config import get_settings
+from app.logging_config import configure_logging
 
 
 def create_app(
@@ -16,7 +18,12 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         nonlocal graph, session_factory
 
+        configure_logging(get_settings().log_level)
+
         if graph is None:
+            # Capabilities must be registered before any agent factory in
+            # app.agents is called, since each factory formats its prompt
+            # from the current capability catalog on first use.
             from app.registry import load_capabilities
 
             load_capabilities()
@@ -28,9 +35,9 @@ def create_app(
         if session_factory is None:
             from sqlmodel import Session
 
-            from app.db.engine import engine
+            from app.db.engine import get_engine
 
-            session_factory = lambda: Session(engine)
+            session_factory = lambda: Session(get_engine())
 
         app.state.graph = graph
         app.state.session_factory = session_factory

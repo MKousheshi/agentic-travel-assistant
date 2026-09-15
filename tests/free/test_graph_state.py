@@ -86,10 +86,11 @@ def test_resumed_multi_step_plan_finishes(graph, monkeypatch, fake_capability):
     plan = make_plan([1, 2])
     planner = FakeStructuredAgent([PlanResponse(kind="plan", response=plan)])
     evaluator = FakeStructuredAgent([Feedback(validated=True, message="ok")])
-    monkeypatch.setattr("app.graph.nodes.planner_agent", planner)
-    monkeypatch.setattr("app.graph.nodes.eval_agent", evaluator)
+    monkeypatch.setattr("app.graph.nodes.get_planner_agent", lambda: planner)
+    monkeypatch.setattr("app.graph.nodes.get_eval_agent", lambda: evaluator)
     monkeypatch.setattr(
-        "app.graph.nodes.synthesizer_model", fake_synthesizer("final answer")
+        "app.graph.nodes.get_synthesizer_model",
+        lambda: fake_synthesizer("final answer"),
     )
 
     fake_capability.append(
@@ -146,10 +147,11 @@ def test_state_cleared_after_completed_run(graph, monkeypatch, fake_capability):
         ]
     )
     evaluator = FakeStructuredAgent([Feedback(validated=True, message="ok")])
-    monkeypatch.setattr("app.graph.nodes.planner_agent", planner)
-    monkeypatch.setattr("app.graph.nodes.eval_agent", evaluator)
+    monkeypatch.setattr("app.graph.nodes.get_planner_agent", lambda: planner)
+    monkeypatch.setattr("app.graph.nodes.get_eval_agent", lambda: evaluator)
     monkeypatch.setattr(
-        "app.graph.nodes.synthesizer_model", fake_synthesizer("final answer")
+        "app.graph.nodes.get_synthesizer_model",
+        lambda: fake_synthesizer("final answer"),
     )
     fake_capability.append(CapabilitySuccess(message="done", data={}))
 
@@ -184,10 +186,11 @@ def test_retry_feedback_is_labelled(graph, monkeypatch, fake_capability):
             Feedback(validated=True, message="ok"),
         ]
     )
-    monkeypatch.setattr("app.graph.nodes.planner_agent", planner)
-    monkeypatch.setattr("app.graph.nodes.eval_agent", evaluator)
+    monkeypatch.setattr("app.graph.nodes.get_planner_agent", lambda: planner)
+    monkeypatch.setattr("app.graph.nodes.get_eval_agent", lambda: evaluator)
     monkeypatch.setattr(
-        "app.graph.nodes.synthesizer_model", fake_synthesizer("final answer")
+        "app.graph.nodes.get_synthesizer_model",
+        lambda: fake_synthesizer("final answer"),
     )
     fake_capability.append(CapabilitySuccess(message="ok", data={}))
     fake_capability.append(CapabilitySuccess(message="ok", data={}))
@@ -214,8 +217,8 @@ def test_planning_failure_answers_the_user(graph, monkeypatch):
     evaluator = FakeStructuredAgent(
         [Feedback(validated=False, message="still wrong") for _ in range(3)]
     )
-    monkeypatch.setattr("app.graph.nodes.planner_agent", planner)
-    monkeypatch.setattr("app.graph.nodes.eval_agent", evaluator)
+    monkeypatch.setattr("app.graph.nodes.get_planner_agent", lambda: planner)
+    monkeypatch.setattr("app.graph.nodes.get_eval_agent", lambda: evaluator)
 
     session = FakeSession()
     config = _config("t-planning-failed", session)
@@ -241,7 +244,7 @@ def test_clarification_clears_state(graph, monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr("app.graph.nodes.planner_agent", planner)
+    monkeypatch.setattr("app.graph.nodes.get_planner_agent", lambda: planner)
 
     session = FakeSession()
     config = _config("t-clarify", session)

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,10 +11,12 @@ from langgraph.errors import GraphRecursionError
 from langsmith import traceable
 
 from app.capabilities.ticket.tools import ticket_tools
-from app.chat_models import capability_model
+from app.chat_models import get_chat_model
 from app.models import CapabilityFailure, CapabilityResult, PlanStep
 from app.prompts.capability import CAPABILITY_PROMPT
 from app.registry import register_capability
+
+logger = logging.getLogger(__name__)
 
 
 @register_capability(
@@ -34,7 +37,7 @@ def ticket_capability(
     messages: list[AnyMessage | dict[str, Any]] = state.get("messages", [])
     config = config | {"recursion_limit": 10}
     agent = create_agent(
-        model=capability_model,
+        model=get_chat_model(),
         tools=ticket_tools,
         system_prompt=CAPABILITY_PROMPT.format(
             current_date=datetime.now(UTC).date().isoformat(),
@@ -50,5 +53,12 @@ def ticket_capability(
         )
         response: CapabilityResult = result["structured_response"]
         return response
-    except GraphRecursionError as e:
-        return CapabilityFailure(message=str(e), reason=str(e), details={})
+    except GraphRecursionError:
+        logger.warning(
+            "Capability 'ticket' hit its recursion limit on step %s", step.step_id
+        )
+        return CapabilityFailure(
+            message="This step needed more actions than allowed, so it was stopped.",
+            reason="recursion_limit_exceeded",
+            details={},
+        )

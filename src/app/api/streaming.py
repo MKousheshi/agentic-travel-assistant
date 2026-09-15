@@ -1,9 +1,13 @@
+import logging
 from collections.abc import AsyncGenerator
 from typing import Any
+from uuid import uuid4
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.sse import ServerSentEvent
 from langchain_core.messages import AIMessageChunk
+
+logger = logging.getLogger(__name__)
 
 
 def _to_json(obj: Any) -> Any:
@@ -73,10 +77,19 @@ async def stream_run(
                     yield ServerSentEvent(
                         event="token", data={"content": message.content}
                     )
-    except Exception as exc:  # noqa: BLE001 - any run failure must surface as an `error` event
+    except Exception:  # any run failure must surface as an `error` event
         if session is not None and session.in_transaction():
             session.rollback()
-        yield ServerSentEvent(event="error", data={"detail": str(exc)})
+        error_id = uuid4().hex[:8]
+        logger.exception(
+            "Graph run failed (error_id=%s, thread_id=%s)",
+            error_id,
+            config.get("configurable", {}).get("thread_id"),
+        )
+        detail = (
+            f"Something went wrong while handling your request (error id {error_id})."
+        )
+        yield ServerSentEvent(event="error", data={"detail": detail})
         yield ServerSentEvent(event="end", data={"interrupted": interrupted})
         return
 

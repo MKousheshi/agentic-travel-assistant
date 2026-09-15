@@ -96,13 +96,6 @@ class SearchBookingsInput(BaseModel):
         return self
 
 
-def format_validation_error(error: Exception) -> str:
-    """
-    Converts LangChain/Pydantic validation failures into a useful tool response.
-    """
-    return f"Invalid search_bookings input: {error}"
-
-
 @tool(args_schema=SearchBookingsInput)
 def search_bookings(
     config: RunnableConfig,

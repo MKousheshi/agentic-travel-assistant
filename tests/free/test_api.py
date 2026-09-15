@@ -1,3 +1,4 @@
+import re
 import threading
 import time
 from typing import Annotated, Any, Literal, Required, TypedDict
@@ -197,7 +198,7 @@ def build_raising_graph():
     return graph.compile(checkpointer=MemorySaver())
 
 
-def test_graph_error_emits_error_event_and_rolls_back():
+def test_graph_error_emits_error_event_and_rolls_back(caplog):
     graph = build_raising_graph()
     sessions: list[FakeSession] = []
 
@@ -210,14 +211,26 @@ def test_graph_error_emits_error_event_and_rolls_back():
         return session
 
     app = create_app(graph=graph, session_factory=session_factory)
-    with TestClient(app) as client:
+    with TestClient(app) as client, caplog.at_level("ERROR"):
         events = _collect_events(client, "t-error", {"message": "hi"})
 
     assert [event for event, _ in events] == ["error", "end"]
-    assert "boom" in events[0][1]["detail"]
+    detail = events[0][1]["detail"]
+    assert "boom" not in detail
+    assert "error id" in detail
     assert events[1][1] == {"interrupted": False}
     assert sessions[0].rollback_called is True
     assert sessions[0].in_transaction() is False
+
+    error_id_match = re.search(r"error id (\w+)", detail)
+    assert error_id_match is not None
+    error_id = error_id_match.group(1)
+    error_records = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(error_records) == 1
+    assert error_records[0].getMessage() == (
+        f"Graph run failed (error_id={error_id}, thread_id=t-error)"
+    )
+    assert "boom" in caplog.text
 
 
 def _other_llm_node(state: FakeState) -> dict:

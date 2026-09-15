@@ -111,18 +111,6 @@ class ClarificationResponse(BaseModel):
 PlannerResponse = PlanResponse | ClarificationResponse
 
 
-class StepExecution(BaseModel):
-    step_index: int
-    capability_id: str
-    action: str
-    status: Literal[
-        "success",
-        "failure",
-        "needs_information",
-    ]
-    result: dict[str, Any] = Field(default_factory=dict)
-
-
 class CapabilitySuccess(BaseModel):
     status: Literal["success"] = "success"
     message: str = Field(
@@ -155,21 +143,6 @@ class CapabilityFailure(BaseModel):
 
 
 CapabilityResult = CapabilitySuccess | CapabilityNeedsInformation | CapabilityFailure
-
-
-class ResponseSynthesisInput(BaseModel):
-    outcome: Literal[
-        "success",
-        "failure",
-        "needs_information",
-    ]
-    step_results: list[dict[str, Any]]
-    failed_step: dict[str, Any] | None = None
-    pending_question: str | None = None
-
-
-class ResponseSynthesis(BaseModel):
-    user_message: str
 
 
 class Feedback(BaseModel):
