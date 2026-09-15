@@ -1,0 +1,17 @@
+# Dev override: bind-mounts source for auto-reload. No image rebuild is
+# needed on code changes; only a dependency change (pyproject.toml/uv.lock)
+# needs `docker compose build`.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  api:
+    volumes:
+      - ./src:/app/src
+    command: ["uvicorn", "app.api.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src"]
+
+  ui:
+    volumes:
+      - ./src:/app/src
+      - ./chainlit.md:/app/chainlit.md
+    command: ["chainlit", "run", "src/app/ui/chainlit_app.py", "--host", "0.0.0.0", "--port", "8001", "--headless", "-w"]

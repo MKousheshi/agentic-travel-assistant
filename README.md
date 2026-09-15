@@ -317,6 +317,41 @@ Chainlit will display the local application URL in the terminal after startup (p
 - `POST /threads/{thread_id}/stream` — runs the graph for a thread and streams the result as Server-Sent Events. The body is `{"message": "..."}` for a new user message or `{"resume": {...}}` to answer a pending confirmation/clarification. Event types: `node` (an intermediate step's output), `token` (the final answer streaming in), `message` (the complete final answer), `interrupt` (a confirmation is required), `error`, and `end`.
 - `DELETE /threads/{thread_id}` — idempotently drops a thread's session and checkpoint.
 
+## Running with Docker
+
+Both processes can also run with a single `docker compose up`, instead of `uv run api` / `uv run ui` in two terminals.
+
+Prerequisites:
+
+```bash
+cp .env.example .env   # fill in the required values
+```
+
+The SQLite database at `./var/travel.sqlite` must already exist before the first `docker compose up` — it's bind-mounted into the container so bookings persist on the host, exactly as they do with `uv run api`. If `./var` doesn't exist yet, Docker will create an empty, root-owned directory instead and the API will fail at its first DB query.
+
+Production-style (immutable image, no reload):
+
+```bash
+docker compose up --build
+```
+
+Development (bind-mounts `./src` and auto-reloads both services):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Either way: the UI is at `http://localhost:8001` and the API at `http://localhost:8000`, both bound to `127.0.0.1` only. On a host where your user isn't uid/gid 1000, build the image with your own ids first, then bring the stack up without rebuilding:
+
+```bash
+docker compose build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
+docker compose up
+```
+
+so that files written into the bind-mounted `./var` stay owned by you. (`docker compose up --build` doesn't accept `--build-arg`, and a compose-file `args: { UID: ${UID} }` won't work either since `UID` isn't an exported shell variable — it would resolve to empty and break `groupadd`.)
+
+Note that, like local runs, thread state (`MemorySaver`, per-thread DB sessions) doesn't survive a container restart.
+
 ## Testing & Verification
 
 Tests are split by cost:

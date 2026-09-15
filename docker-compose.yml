@@ -1,0 +1,32 @@
+# Prerequisites: `./var/travel.sqlite` and `.env` must already exist (see
+# README.md -> Running with Docker). Without them, Docker creates an empty
+# root-owned `var/` directory and the API fails at the first DB query.
+
+services:
+  api:
+    build: .
+    image: travel-assistant:latest
+    env_file: .env
+    environment:
+      DB_PATH: /app/var/travel.sqlite
+    volumes:
+      - ./var:/app/var
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped
+
+  ui:
+    image: travel-assistant:latest
+    command: ["chainlit", "run", "src/app/ui/chainlit_app.py", "--host", "0.0.0.0", "--port", "8001", "--headless"]
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
